@@ -6,6 +6,7 @@ import org.duangsuse.kamet.irbuild.items.LValue
 
 object LTypes {
   val void = LLVMVoidType()
+  fun i(n: Int) = LLVMIntType(n)
   val i1 = LLVMInt1Type()
   val i8 = LLVMInt8Type(); val i16 = LLVMInt16Type()
   val i32 = LLVMInt32Type(); val i64 = LLVMInt64Type()

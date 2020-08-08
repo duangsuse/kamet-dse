@@ -4,6 +4,7 @@ import org.bytedeco.javacpp.PointerPointer
 import org.bytedeco.llvm.LLVM.LLVMBuilderRef
 import org.bytedeco.llvm.global.LLVM.*
 import org.duangsuse.kamet.irbuild.items.*
+import org.duangsuse.kamet.splitPairs
 
 class IRBuilder: LRefContainer<LLVMBuilderRef>(LLVMCreateBuilder()), Disposable {
   var pos: LBasicBlock
@@ -26,6 +27,8 @@ class IRBuilder: LRefContainer<LLVMBuilderRef>(LLVMCreateBuilder()), Disposable 
     return node
   }
 
+  fun load(value: LValue, name: String = "load") = LLVMBuildLoad(llvm, value, name)
+  fun store(value: LValue, dest: LValue) = LLVMBuildStore(llvm, value, dest)
   fun call(fn: LFunction, vararg arguments: LValue, name: String = "cres") = LLVMBuildCall(llvm, fn.llvm, PointerPointer(*arguments), arguments.size, name)
 
   fun op(instr: String, a: LValue, b: LValue, name: String? = null): LValue {

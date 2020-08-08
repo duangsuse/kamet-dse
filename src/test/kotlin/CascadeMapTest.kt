@@ -1,4 +1,4 @@
-import org.duangsuse.kamet.irbuild.CascadeMap
+import org.duangsuse.kamet.CascadeMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

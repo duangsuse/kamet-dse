@@ -2,6 +2,7 @@
   <dictionary name="DuangSUSE">
     <words>
       <w>conv</w>
+      <w>deref</w>
       <w>elim</w>
       <w>licm</w>
       <w>reassociate</w>

@@ -7,7 +7,7 @@ import org.duangsuse.kamet.irbuild.Consumer
 class LPassManager: LRefContainer<LLVMPassManagerRef>(LLVM.LLVMCreatePassManager()), Disposable {
   /** Return `true` for modified */
   fun runOn(mod: LModule): Boolean = LLVM.LLVMRunPassManager(llvm, mod.llvm) == 1
-  fun add(vararg addPass: Consumer<LLVMPassManagerRef>) = addPass.forEach { it(llvm) }
+  fun add(vararg addPass: Consumer<LLVMPassManagerRef>) = this.also { addPass.forEach { it(llvm) } }
 
   override fun dispose() { LLVM.LLVMDisposePassManager(llvm) }
 

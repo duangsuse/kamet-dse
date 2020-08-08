@@ -25,7 +25,7 @@ class LModule(name: String): LRefContainer<LLVMModuleRef>(LLVM.LLVMModuleCreateW
     withErrorHandling("create JIT") { LLVM.LLVMCreateJITCompilerForModule(engine, llvm, optLevel, it) }
   }
 
-  fun runVerify(mode: Int = LLVM.LLVMAbortProcessAction) = withErrorHandling("verification failed") { LLVM.LLVMVerifyModule(llvm, mode, it) }
+  fun runVerify(mode: Int = LLVM.LLVMAbortProcessAction) = withErrorHandling { LLVM.LLVMVerifyModule(llvm, mode, it) }
   fun debugDump() = LLVM.LLVMDumpModule(llvm)
   companion object {
     fun setupLLVMNative() {
