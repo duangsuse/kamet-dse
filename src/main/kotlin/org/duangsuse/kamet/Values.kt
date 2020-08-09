@@ -1,13 +1,13 @@
 package org.duangsuse.kamet
 
-import org.bytedeco.llvm.LLVM.LLVMValueRef
 import org.duangsuse.kamet.irbuild.IRBuilder
+import org.duangsuse.kamet.irbuild.Pipe
 import org.duangsuse.kamet.irbuild.items.LValue
 import org.duangsuse.kamet.irbuild.undef
 
 /**
- * Value with deref, and its Ref with assign(setIn).
- * - Unit / UnitValueRef
+ * Value with [Value.derefIn], and its Ref with assign([ValueRef.setIn]).
+ * - [Unit] / [UnitValueRef]
  */
 object Values {
   val Unit = Value(Types.Unit.llvm.undef(), Types.Unit)
@@ -17,16 +17,19 @@ object Values {
   }
 }
 
-open class Value(val llvm: LValue, val type: Types.Type) {
+open class Value(val llvm: LValue, val type: Type) {
   open fun derefIn(ir: IRBuilder) = this
   operator fun component1() = llvm
   operator fun component2() = type
+  fun wrap(op: Pipe<LValue>) = Value(op(llvm), type)
 }
+fun Value.toRef(isConst: Boolean) = ValueRef(llvm, type, isConst)
 
-open class ValueRef(address: LLVMValueRef, val orig: Types.Type, val isConst: Boolean): Value(address, orig.reference(isConst)) {
+open class ValueRef(allocated: LValue, type: Type, isConst: Boolean): Value(allocated, type.reference(isConst)) {
   open fun setIn(ir: IRBuilder, value: Value) {
-    if (isConst) error("Attempt to alter a const reference")
+    if (referType.isConst) error("attempt to alter a const reference")
     ir.store(value.llvm, this.llvm)
   }
-  override fun derefIn(ir: IRBuilder): Value = Value(ir.load(this.llvm), orig)
+  override fun derefIn(ir: IRBuilder): Value = Value(ir.load(this.llvm), referType.orig)
+  private val referType get() = (type as Types.Reference)
 }

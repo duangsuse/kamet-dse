@@ -8,6 +8,7 @@ import org.duangsuse.kamet.irbuild.items.LType
 
 typealias Producer<T> = () -> T
 typealias Consumer<T> = (T) -> Unit
+typealias Pipe<T> = (T) -> T
 
 inline fun withErrorHandling(message: String? = null, op: (BytePointer) -> Int) {
   val szError = BytePointer(null as Pointer?)
@@ -19,4 +20,4 @@ fun BytePointer.asErrorMessage(): String = string.also { LLVMDisposeMessage(this
 fun LType.pointer(): LType = LLVMPointerType(this, 0)
 
 internal fun Boolean.toInt() = if (this) 1 else 0
-internal fun String.showIf(p: Boolean) = if (p) this else ""
+

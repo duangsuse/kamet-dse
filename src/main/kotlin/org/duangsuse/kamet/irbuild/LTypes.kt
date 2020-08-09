@@ -16,6 +16,7 @@ object LTypes {
   fun fnTyped(return_type: LType, vararg params_type: LType, is_vararg: Boolean = false)
     = LLVMFunctionType(return_type, params_type[0], params_type.size, is_vararg.toInt())
   fun unnamedStruct(vararg elements: LType, is_packed: Boolean) = LLVMStructType(elements[0], elements.size, is_packed.toInt())
+  fun array(type: LType, size: Int) = LLVMArrayType(type, size)
 }
 
 fun LType.undef(): LValue = LLVMGetUndef(this)
