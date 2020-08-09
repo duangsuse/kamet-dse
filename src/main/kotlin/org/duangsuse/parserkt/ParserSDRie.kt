@@ -40,8 +40,10 @@ inline fun <T, R> Repeat(crossinline fold: Fold<T, R>, crossinline p: Parser<T>,
 }
 
 fun item(c: Char) = satisfy { it == c }
+fun notItem(c: Char) = satisfy { it != c }
 fun elementIn(vararg ranges: CharRange) = satisfy { ranges.any { cs -> it in cs } }
 fun elementIn(cs: CharRange) = satisfy { it in cs }
+fun notElementIn(cs: CharRange) = satisfy { it !in cs }
 fun singleCharRanges(vararg cs: Char) = Array(cs.size) { i -> cs[i]..cs[i] }
 inline fun satisfy(crossinline predicate: CharPredicate): Parser<Char> = parse@ {
   if (predicate(it.peek)) it.consumeOrNull() else notPas
