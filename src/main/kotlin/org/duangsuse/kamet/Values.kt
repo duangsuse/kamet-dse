@@ -3,14 +3,14 @@ package org.duangsuse.kamet
 import org.duangsuse.kamet.irbuild.IRBuilder
 import org.duangsuse.kamet.irbuild.Pipe
 import org.duangsuse.kamet.irbuild.items.LValue
-import org.duangsuse.kamet.irbuild.undef
+import org.duangsuse.kamet.irbuild.undefined
 
 /**
  * Value with [Value.derefIn], and its Ref with assign([ValueRef.setIn]).
  * - [Unit] / [UnitValueRef]
  */
 object Values {
-  val Unit = Value(Types.Unit.llvm.undef(), Types.Unit)
+  val Unit = Value(Types.Unit.llvm.undefined(), Types.Unit)
   class UnitValueRef(isConst: Boolean): ValueRef(Types.Unit.nullPtr().llvm, Types.Unit, isConst) {
     override fun setIn(ir: IRBuilder, value: Value) {}
     override fun derefIn(ir: IRBuilder): Value = Unit

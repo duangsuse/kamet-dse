@@ -3,12 +3,13 @@ package org.duangsuse.kamet.ast
 import org.duangsuse.kamet.Type
 import org.duangsuse.kamet.joinToCommaString
 
-class SubscriptNode(val array: ASTNode, val index: ASTNode) : ASTNode {
+// Pointer subscript, invocation, and type rhs (as, sizeof)
+class SubscriptNode(val array: ASTNode, val index: ASTNode): ASTNode {
   override fun <R> visitBy(vis: ASTNode.Visitor<R>) = vis.see(this)
   override fun toString() = "$array[$index]"
 }
 
-class InvocationNode(val name: String, val elements: List<ASTNode>) : ASTNode {
+class InvocationNode(val name: String, val elements: List<ASTNode>): ASTNode {
   override fun <R> visitBy(vis: ASTNode.Visitor<R>) = vis.see(this)
   override fun toString() = "$name(${elements.joinToCommaString()})"
 }

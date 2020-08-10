@@ -3,6 +3,7 @@ package org.duangsuse.kamet.ast
 import org.duangsuse.kamet.Type
 import org.duangsuse.kamet.Types
 import org.duangsuse.kamet.joinToCommaString
+import org.duangsuse.kamet.showIfNotNull
 
 class RootNode(val elements: List<ASTNode>): ASTNode {
   override fun <R> visitBy(vis: ASTNode.Visitor<R>) = vis.see(this)
@@ -20,7 +21,7 @@ class PrototypeNode(
 
   val functionName = attributes.mapValueForAST("Prototype", Attribute.NO_MANGLE to name) ?: mangled
   override fun <R> visitBy(vis: ASTNode.Visitor<R>) = vis.see(this)
-  override fun toString() = "$name(${parameters.joinToCommaString()}):$returnType"
+  override fun toString() = "${Attribute.NO_MANGLE.showIf(functionName != mangled)}$name(${parameters.joinToCommaString()}): $returnType"
 }
 
 class FunctionNode(val prototype: PrototypeNode, val body: BlockNode): ASTNode {
@@ -41,9 +42,9 @@ class ValDeclareNode(
   val name: String,
   val type: Type? = null,
   val value: ASTNode? = null
-) : ASTNode {
+): ASTNode {
   override fun <R> visitBy(vis: ASTNode.Visitor<R>) = vis.see(this)
-  override fun toString() = "val $name = $value"
+  override fun toString() = "val $name${type.showIfNotNull(": ")} = $value"
 }
 
 class VarDeclareNode(
@@ -51,7 +52,7 @@ class VarDeclareNode(
   val type: Type? = null,
   val defaultValue: ASTNode? = null,
   val isConst: Boolean = false
-) : ASTNode {
+): ASTNode {
   override fun <R> visitBy(vis: ASTNode.Visitor<R>) = vis.see(this)
-  override fun toString() = "var $name = $defaultValue"
+  override fun toString() = "var $name${type.showIfNotNull(": ")} = $defaultValue"
 }

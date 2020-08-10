@@ -35,8 +35,7 @@ fun getLiftKind(type: Type, dest: Type): Int? = when (type) {
 fun getUnifiedLiftType(a: Type, b: Type): Type =
   when {
     a !is Prim || b !is Prim -> TODO("unify data types")
-    a == b &&
-      a in arrayOf(Prim.Float, Prim.Double, Prim.Boolean) -> a
+    a == b && a in arrayOf(Prim.Float, Prim.Double, Prim.Boolean) -> a
     else -> { // bit size first
       val lhsTypedI = a as Prim.Integral
       val lb = lhsTypedI.bitSize
@@ -80,7 +79,7 @@ fun IRBuilder.lift(from: Value, dest: Type): Value { // numeric lifting casts
       }
     }
   }
-  return Value(coercion, dest)
+  return coercion.typed(dest)
 }
 
 private fun bitSizeGT(a: Prim, b: Prim) = a.bitSize > b.bitSize

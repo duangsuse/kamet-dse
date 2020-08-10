@@ -8,9 +8,9 @@ interface Feed { // In last project that's a generic stream, and CharInput shoul
   object End: NoSuchElementException("no more")
 }
 interface SourceLocated {
-  val sourceLoc: SourceLocator
-  interface SourceLocator { val file: String; val line: Int; val column: Int }
-  data class CurrentLocation(override val file: String, override var line: Int, override var column: Int, val eol: Char): SourceLocator {
+  val sourceLoc: SourceLocation
+  interface SourceLocation { val file: String; val line: Int; val column: Int }
+  data class CurrentLocation(override val file: String, override var line: Int, override var column: Int, val eol: Char): SourceLocation {
     constructor(file: String, eol: Char = System.lineSeparator().singleOrNull() ?: '\n'): this(file, 1, 1, eol)
     override fun toString() = "$file:$line:$column"
     fun onAccept(c: Char) {
@@ -33,7 +33,7 @@ interface Input: SourceLocated,Feed, FeedControl, FeedError
 
 abstract class BaseInput(file: String): Input { // not implemented: Feed,FeedControl
   protected val currentLoc = SourceLocated.CurrentLocation(file)
-  override val sourceLoc: SourceLocated.SourceLocator = currentLoc
+  override val sourceLoc: SourceLocated.SourceLocation = currentLoc
   override var errorHandler = raiseError
 }
 
@@ -42,7 +42,7 @@ class CharFIFO(val string: StringBuilder = StringBuilder()) {
   fun pop(): Char = string[0].also { string.deleteCharAt(0) }
 }
 
-open class IteratorInput(private val iterator: CharIterator, file: String = "<anon>"): BaseInput(file) {
+open class IteratorInput(val iterator: CharIterator, file: String = "<anon>"): BaseInput(file) {
   private var lastItem = try { iterator.nextChar() } catch (e: Exception) { throw Error("initial peek failed for $iterator", e) }
   private var tailConsumed = false // goes true last-1st time consume(), last-2nd: !iterator.hasNext() but peek unconsumed
 

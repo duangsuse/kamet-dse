@@ -50,9 +50,10 @@ internal fun String.escape(): String = fold(StringBuilder()) { sb, c ->
 }.toString()
 
 internal fun String.showIf(p: Boolean) = if (p) this else ""
+internal fun Any?.showIfNotNull(prefix: String) = this?.let { prefix+it } ?: ""
 
 fun String.toLongOverflow(base: Int = 10): Long =
   substring(if (this[0] == '-') 1 else 0).fold(0L) { acc, c -> acc*base + (c-'0') }
 
-class IllegalCastException(val type: Type, val dest: Type) : IllegalArgumentException("Illegal cast from $type to $dest")
-class IllegalEscapeException(val char: Char) : NoSuchElementException("Illegal escape char: ${char.describe()}")
+class IllegalCastException(type: Type, dest: Type): IllegalArgumentException("Illegal cast from $type to $dest")
+class IllegalEscapeException(char: Char): NoSuchElementException("Illegal escape char: ${char.describe()}")

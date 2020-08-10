@@ -19,5 +19,5 @@ object LTypes {
   fun array(type: LType, size: Int) = LLVMArrayType(type, size)
 }
 
-fun LType.undef(): LValue = LLVMGetUndef(this)
+fun LType.undefined(): LValue = LLVMGetUndef(this)
 fun LType.nullPtr(): LValue = LLVMConstNull(this)

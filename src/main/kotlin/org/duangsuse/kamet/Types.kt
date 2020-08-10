@@ -5,8 +5,9 @@ import org.duangsuse.kamet.irbuild.items.LType
 
 open class Type(val name: String, val llvm: LType) {
   open fun <R> visitBy(vis: Types.Visitor<R>): R = vis.see(this)
-  open fun undefIn(ir: IRBuilder) = Value(llvm.undef(), this)
-  fun nullPtr() = pointer().let { Value(it.llvm.nullPtr(), it) }
+  open fun undefinedIn(ir: IRBuilder) = Value(llvm.undefined(), this)
+  fun nullPtr() = pointer().let { it.llvm.nullPtr().typed(it) }
+  open fun asPointerOrNull(): Types.Pointer? = null
 }
 
 /**
@@ -30,6 +31,7 @@ object Types {
   }
   data class TypedName(val name: String, val type: Type) {
     fun wrap(op: Pipe<Type>) = TypedName(name, op(type))
+    override fun toString() = "$name: $type"
   }
 
   class Unresolved(name: String): Type(name, LTypes.void) {
@@ -37,8 +39,8 @@ object Types {
   }
   interface TypeModifier { // reference, pointer
     val orig: Type
-    fun checkOrigNotReference(modifier_name: String) = require(orig !is Reference) { "creating a $modifier_name of a reference" }
   }
+  fun TypeModifier.checkOrigNotReference(modifier_name: String) = require(orig !is Reference) { "creating a $modifier_name of a reference" }
   object Nothing: Type("Nothing", LTypes.void)
   object Unit: Type("Unit", LTypes.void)
 
@@ -55,15 +57,10 @@ object Types {
     }
     operator fun get(name: String) = elements[indexOf(name)]
   }
-  data class Array(val elementType: Type, val size: Int, val isConst: Boolean,
-    private val rawType: LType = LTypes.array(elementType.llvm, size)
-  ): Type(
+  data class Array(val elementType: Type, val size: Int, val isConst: Boolean): Type(
     "[${"const ".showIf(isConst)}$elementType, $size]",
-    elementType.pointer(isConst).llvm
-  ) {
-    override fun undefIn(ir: IRBuilder): Value =
-      Value(ir.bitCast(ir.allocateLocal(rawType, "array"), llvm, "ary2ptr"), this)
-  }
+    LTypes.array(elementType.llvm, size)
+  )
 
   sealed class Prim(name: String, type: LType, val bitSize: kotlin.Int): Type(name, type) {
     open class Integral(name: String, bitSize: kotlin.Int, val signed: kotlin.Boolean = true): Prim(name, LTypes.i(bitSize), bitSize) {
@@ -97,12 +94,15 @@ object Types {
     Type("&${showModifier(isConst, orig)}", orig.llvm.pointer()) {
     init { checkOrigNotReference("reference") }
     override fun <R> visitBy(vis: Visitor<R>): R = vis.see(this)
+    override fun asPointerOrNull() = (orig as? Array)?.elementType?.pointer(orig.isConst)
   }
   data class Pointer(override val orig: Type, val isConst: Boolean): TypeModifier,
     Type("*${showModifier(isConst, orig)}", orig.llvm.pointer()) {
     init { checkOrigNotReference("pointer") }
     override fun <R> visitBy(vis: Visitor<R>): R = vis.see(this)
+    override fun asPointerOrNull() = this
   }
+  var sizeT = Prim.ULong
 
   private val defaultTypes = arrayOf(
     Nothing,
@@ -124,8 +124,10 @@ object Types {
   }
 }
 
+val Type.isPrim get() = this is Types.Prim
 internal inline val Type.isReference get() = this is Types.Reference
 internal inline val Type.isPointer get() = this is Types.Pointer
 
 fun Type.reference(isConst: Boolean = false) = Types.Reference(this, isConst)
 fun Type.pointer(isConst: Boolean = false) = Types.Pointer(this, isConst)
+inline val Type.canAsPointer get() = asPointerOrNull() != null

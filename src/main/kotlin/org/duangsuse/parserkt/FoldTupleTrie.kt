@@ -1,7 +1,6 @@
 package org.duangsuse.parserkt
 
 import org.duangsuse.kamet.impossible
-import sun.text.normalizer.UTF16.append
 import java.lang.StringBuilder
 
 /** Fold is a storage allocator for [Reducer] */
@@ -30,6 +29,11 @@ fun <T> asList(): Reducer<T, List<T>> = ModifyReducer(mutableListOf()) { add(it)
 fun asString(): Reducer<Char, String> = ConvertReducer(StringBuilder(), { append(it) }, { toString() })
 fun concatAsString(): Reducer<String, String> = ConvertReducer(StringBuilder(), { append(it) }, { toString() })
 fun concatAsNumber(base: Int = 10): Reducer<Int, Long> = ModifyReducer(0L) { this*base + it }
+fun <T, R> asIgnored(placeholder: R): Fold<T, R> = {AsIgnoredReducer(placeholder)}
+class AsIgnoredReducer<T>(private val placeholder: T): Reducer<Any?, T> {
+  override fun accept(x: Any?) {}
+  override fun finish() = placeholder
+}
 
 // Mutable tuple 2~4
 data class Tuple2<A, B>(var e1: A, var e2: B)
@@ -70,3 +74,19 @@ fun <V> Trie<Char, V>.mergeStrings(vararg pairs: Pair<String, V>) {
 }
 
 fun hash(vararg objects: Any?) = objects.fold(0) { a, b -> a.hashCode() xor b.hashCode() }
+
+/** Functional datatype unions left/right, or [A]/[B] together */
+sealed class Either<out A, out B> {
+  data class Left<A>(val item: A): Either<A, Nothing>()
+  data class Right<B>(val item: B): Either<Nothing, B>()
+
+  val left: A? get() = (this as? Left)?.item
+  val right: B? get() = (this as? Right)?.item
+
+  private fun fail(expected_leaf: String): Nothing = error("failed to get $expected_leaf from $this")
+  fun mustLeft() = left ?: fail("Left")
+  fun mustRight() = right ?: fail("Right")
+
+  inline fun <R> fold(left: (A) -> R, right: (B) -> R): R = when (this) { is Left -> left(item) ; is Right -> right(item) }
+  fun swap(): Either<B, A> = fold(::Right, ::Left)
+}

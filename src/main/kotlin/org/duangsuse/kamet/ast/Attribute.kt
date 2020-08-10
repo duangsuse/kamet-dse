@@ -17,3 +17,4 @@ fun <R> Attributes.mapValueForAST(name: String, vararg pairs: Pair<Attribute, R>
   for (attr in this) map[attr]?.let { return it } ?: attr.notApplicableTo(name)
   return null
 }
+internal fun Attribute.showIf(p: Boolean) = if (p) "#[${this.name.toLowerCase()}] " else ""

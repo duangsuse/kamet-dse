@@ -1,5 +1,6 @@
 package org.duangsuse.kamet.ast
 
+// arithmetic and boolean operators
 interface Operator { val symbol: String; val precedence: Int }
 
 private var nextPrecedence = 1
@@ -28,12 +29,12 @@ enum class UnaryOp(override val symbol: String, val hasPostfix: Boolean = false)
   override val precedence: Int = 0
 }
 
-class BinOpNode(val lhs: ASTNode, val rhs: ASTNode, val op: BinOp) : ASTNode {
+class BinOpNode(val lhs: ASTNode, val rhs: ASTNode, val op: BinOp): ASTNode {
   override fun <R> visitBy(vis: ASTNode.Visitor<R>) = vis.see(this)
   override fun toString() = "($lhs ${op.symbol} $rhs)"
 }
 
-class UnaryOpNode(val op: UnaryOp, val value: ASTNode, val isPostfix: Boolean = false) : ASTNode {
+class UnaryOpNode(val op: UnaryOp, val value: ASTNode, val isPostfix: Boolean = false): ASTNode {
   override fun <R> visitBy(vis: ASTNode.Visitor<R>) = vis.see(this)
   override fun toString() = if (isPostfix) "$value${op.symbol}" else "${op.symbol}$value"
 }
