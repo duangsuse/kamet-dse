@@ -23,6 +23,7 @@ interface FeedControl {
   fun peekMany(n: Int): String
   val isEnd: Boolean
 }
+
 typealias ErrorHandler = Feed.(String) -> Unit
 interface FeedError { var errorHandler: ErrorHandler }
 private val raiseError: ErrorHandler = { msg -> throw InputMismatchException(this.sourceLoc?.let { "$it: $msg" } ?: msg) }
@@ -30,7 +31,7 @@ private val raiseError: ErrorHandler = { msg -> throw InputMismatchException(thi
 // Inputs, for CharIterator and String.
 interface Input: SourceLocated,Feed, FeedControl, FeedError
 
-abstract class BaseInput(file: String): Input {
+abstract class BaseInput(file: String): Input { // not implemented: Feed,FeedControl
   protected val currentLoc = SourceLocated.CurrentLocation(file)
   override val sourceLoc: SourceLocated.SourceLocator = currentLoc
   override var errorHandler = raiseError
@@ -42,17 +43,18 @@ class CharFIFO(val string: StringBuilder = StringBuilder()) {
 }
 
 open class IteratorInput(private val iterator: CharIterator, file: String = "<anon>"): BaseInput(file) {
-  private var lastItem = try { iterator.nextChar() } catch (e: Exception) { throw Error("initial peek failed in $iterator") }
+  private var lastItem = try { iterator.nextChar() } catch (e: Exception) { throw Error("initial peek failed for $iterator", e) }
   private var tailConsumed = false // goes true last-1st time consume(), last-2nd: !iterator.hasNext() but peek unconsumed
 
   private val peekBuffer = CharFIFO()
-  override val isEnd get() = tailConsumed
   override val peek: Char get() = lastItem
+  override val isEnd get() = tailConsumed
   override fun consume(): Char {
-    if (peekBuffer.string.isNotEmpty()) return lastItem.also { lastItem = peekBuffer.pop() }
-    val res = lastItem
-    updateOnConsume(); currentLoc.onAccept(res)
-    return res
+    val oldItem = lastItem
+    if (peekBuffer.string.isNotEmpty()) lastItem = peekBuffer.pop()
+    else updateOnConsume()
+    if (!isEnd) currentLoc.onAccept(oldItem)
+    return oldItem
   }
   private fun updateOnConsume() = if (iterator.hasNext()) lastItem = iterator.nextChar()
     else if (!tailConsumed) tailConsumed = true
@@ -61,7 +63,7 @@ open class IteratorInput(private val iterator: CharIterator, file: String = "<an
   override fun peekMany(n: Int): String {
     require(n > 1) {"$n must >1"}
     val sb = StringBuilder()
-    if (!isEnd) { sb.append(lastItem); currentLoc.column++ } //[0]
+    if (!isEnd) { sb.append(lastItem) } else {  return "" } //[0]
     try {
       for (_t in 1 until n) { sb.append(iterator.nextChar()) }
     } catch (_: StringIndexOutOfBoundsException) {}
@@ -71,12 +73,17 @@ open class IteratorInput(private val iterator: CharIterator, file: String = "<an
 }
 
 open class StringInput(val string: String, file: String = "<string>"): BaseInput(file) {
+  init { require(string.isNotEmpty()) {"empty input"} }
   private var pos = 0
-  override val isEnd get() = (pos == string.length)
-  override val peek: Char get() = try { string[pos] } catch (_: StringIndexOutOfBoundsException) { string[string.lastIndex] }
+  final override var isEnd = false ; private set
+  override val peek: Char get() = string[pos]
   override fun consume(): Char {
-    try { val res = string[pos++]; if(!isEnd) currentLoc.onAccept(res); return res }
-    catch (_: StringIndexOutOfBoundsException) { pos = string.length; throw Feed.End }
+    val res = string[pos++]
+    if (pos == string.length) {
+      if (!isEnd) { pos--; isEnd = true }
+      else throw Feed.End
+    }
+    if (!isEnd) currentLoc.onAccept(res); return res
   }
 
   override fun peekMany(n: Int): String {

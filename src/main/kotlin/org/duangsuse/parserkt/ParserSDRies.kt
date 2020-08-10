@@ -2,17 +2,16 @@ package org.duangsuse.parserkt
 
 import kotlin.reflect.KMutableProperty0
 
-// Pattern Seq, Decide, Repeat and (not)item, (not)elementIn
-// And basic definitions about parser and toDefault()
+// Pattern Seq, Decide, Repeat and (not)item, (not)elementIn, satisfy and string
+// And basic definitions about parsers and toDefault/convert/alsoDo
 
 typealias Parser<T> = (Input) -> T?
 typealias AlwaysParser<T> = (Input) -> T
 inline val notPas: Nothing? get() = null
 
 fun <T> Parser<T>.toDefault(defaultValue: T): AlwaysParser<T> = { this(it) ?: defaultValue }
-inline fun <T, R> Parser<T>.convert(crossinline transform: (T) -> R): Parser<R> = { this(it)?.let(transform) }
-
-fun hash(vararg objects: Any?) = objects.fold(0) { a, b -> a.hashCode() xor b.hashCode() }
+inline fun <T> Parser<T>.alsoDo(crossinline op: (T) -> Unit): Parser<T> = { this(it)?.also(op) } // also, apply
+inline fun <T, R> Parser<T>.convert(crossinline transform: (T) -> R): Parser<R> = { this(it)?.let(transform) } // let, run
 
 private typealias P<T> = Parser<T>
 inline fun <T> Input.run(p: P<T>, assign: KMutableProperty0<T?>): T? = p(this)?.also { assign.set(it) }
@@ -47,6 +46,12 @@ fun notElementIn(cs: CharRange) = satisfy { it !in cs }
 fun singleCharRanges(vararg cs: Char) = Array(cs.size) { i -> cs[i]..cs[i] }
 inline fun satisfy(crossinline predicate: CharPredicate): Parser<Char> = parse@ {
   if (predicate(it.peek)) it.consumeOrNull() else notPas
+}
+fun string(string: String): Parser<String> = parse@ {
+  return@parse if (it.peekMany(string.length) == string) {
+    for (_i in string.indices) it.consume()
+    string
+  } else null
 }
 fun Feed.consumeOrNull() = try { consume() } catch (_:Feed.End) { null }
 

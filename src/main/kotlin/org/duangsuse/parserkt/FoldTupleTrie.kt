@@ -1,8 +1,10 @@
 package org.duangsuse.parserkt
 
 import org.duangsuse.kamet.impossible
+import sun.text.normalizer.UTF16.append
 import java.lang.StringBuilder
 
+/** Fold is a storage allocator for [Reducer] */
 typealias Fold<T, R> = () -> Reducer<T, R>
 
 /** Reducer, or acceptor objects extracted from [Iterable.fold] */
@@ -26,6 +28,7 @@ class ModifyReducer<T, R>(initial: R, accept: R.(T) -> R, finish: R.() -> R): Co
 
 fun <T> asList(): Reducer<T, List<T>> = ModifyReducer(mutableListOf()) { add(it); this }
 fun asString(): Reducer<Char, String> = ConvertReducer(StringBuilder(), { append(it) }, { toString() })
+fun concatAsString(): Reducer<String, String> = ConvertReducer(StringBuilder(), { append(it) }, { toString() })
 fun concatAsNumber(base: Int = 10): Reducer<Int, Long> = ModifyReducer(0L) { this*base + it }
 
 // Mutable tuple 2~4
@@ -65,3 +68,5 @@ operator fun <V> Trie<Char, V>.set(key: CharSequence, value: V) = set(key.asIter
 fun <V> Trie<Char, V>.mergeStrings(vararg pairs: Pair<String, V>) {
   for ((k, v) in pairs) set(k, v)
 }
+
+fun hash(vararg objects: Any?) = objects.fold(0) { a, b -> a.hashCode() xor b.hashCode() }
