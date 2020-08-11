@@ -118,7 +118,7 @@ open class ArgParser4<A,B,C,D>(
     val pre = prefix.last()
     if (itemMode == PositionalMode.MustBefore) sb.append(itemNames).append(' ')
     allParams.joinTo(sb, " ") {
-      val surround: String = if (it.repeatable) "{}" else if (it.defaultValue != null) "[]" else "()"
+      val surround: String = if (it.repeatable) "{}" else if (it.defaultValue != null) "()" else "[]"
       var s = pre+it.joinedName() ; it.param?.run { s += " $this" }
       surround.let { c -> "${c[0]}$s${c[1]}" }
     }

@@ -46,7 +46,7 @@ class ArgParserTest: BaseArgParserTest<String, String, String, String>(luaP) {
   }
   @Test fun itFormats() {
     assertEquals("""
-      usage: {-l name} (-e stat) [-hex n] (-i) (-v) (-E) (-) (--)
+      usage: {-l name} [-e stat] (-hex n) [-i] [-v] [-E] [-] [--]
         -l: require library 'name' into global 'name'
         -e: execute string 'stat'
         -hex: just an option added for test (default FA)
@@ -61,7 +61,7 @@ class ArgParserTest: BaseArgParserTest<String, String, String, String>(luaP) {
   @Test fun unorderedFormats() {
     val pas = ArgParser4(arg("donkey", "donkey you rides", "name"), noArg, noArg, noArg, listOf("papa", "mama"))
     assertEquals("""
-      usage: (-donkey name)
+      usage: [-donkey name]
         -donkey: donkey you rides
       options can be mixed with items: [papa, mama]
     """.trimIndent(), pas.toString())
@@ -95,7 +95,7 @@ class ExtendArgParserTest: BaseArgParserTest<String, Int, String, String>(myP) {
   }
   @Test fun format() {
     assertEquals("""
-      usage: [ah] (-name name) (-count -C count) (-v)
+      usage: [ah] [-name name] [-count -C count] [-v]
         -name: name of the user
         -count -C: number of the widgets
         -v: enable verbose mode
@@ -127,13 +127,13 @@ class ExtendArgParserTest1: BaseArgParserTest<String, Int, File, String>(yourP) 
   }
   @Test fun format() {
     assertEquals("""
-      usage: [-name -N name] (-count -c count) {-I file} (-mode mode) (-h -help) [source, dest]
+      usage: (-name -N name) [-count -c count] {-I file} [-mode mode] [-h -help] [source, dest]
         -name -N: name of the user (default Duckling)
         -count -c: number of widgets
         -I: directory to search for header files
         -mode: mode of operation in: fast, small, quite
         -h -help: print this help
 
-    """.trimIndent(), yourP.toString())
+""".trimIndent(), yourP.toString())
   }
 }
