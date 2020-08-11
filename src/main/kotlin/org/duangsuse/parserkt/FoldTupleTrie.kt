@@ -2,6 +2,7 @@ package org.duangsuse.parserkt
 
 import org.duangsuse.kamet.impossible
 import java.lang.StringBuilder
+import kotlin.reflect.KProperty
 
 /** Fold is a storage allocator for [Reducer] */
 typealias Fold<T, R> = () -> Reducer<T, R>
@@ -35,10 +36,33 @@ class AsIgnoredReducer<T>(private val placeholder: T): Reducer<Any?, T> {
   override fun finish() = placeholder
 }
 
-// Mutable tuple 2~4
+// Mutable tuple 2~4, they are dependent, compile time known so no polymorphism is used
 data class Tuple2<A, B>(var e1: A, var e2: B)
 data class Tuple3<A, B, C>(var e1: A, var e2: B, var e3: C)
 data class Tuple4<A, B, C, D>(var e1: A, var e2: B, var e3: C, var e4: D)
+
+private typealias KP = KProperty<*>
+class TupleIdx1<A>(private val self: Tuple2<A, *>) {
+  operator fun <T> getValue(_t: T, _p: KP) = self.e1
+  operator fun <T> setValue(_t: T, _p: KP, v: A) { self.e1 = v }
+}
+class TupleIdx2<B>(private val self: Tuple2<*, B>) {
+  operator fun <T> getValue(_t: T, _p: KP) = self.e2
+  operator fun <T> setValue(_t: T, _p: KP, v: B) { self.e2 = v }
+}
+class TupleIdx3<C>(private val self: Tuple3<*, *, C>) {
+  operator fun <T> getValue(_t: T, _p: KP) = self.e3
+  operator fun <T> setValue(_t: T, _p: KP, v: C) { self.e3 = v }
+}
+class TupleIdx4<D>(private val self: Tuple4<*, *, *, D>) {
+  operator fun <T> getValue(_t: T, _p: KP) = self.e4
+  operator fun <T> setValue(_t: T, _p: KP, v: D) { self.e4 = v }
+}
+fun <A> Tuple2<A, *>.idx1() = TupleIdx1(this)
+fun <A> Tuple2<*, A>.idx2() = TupleIdx2(this)
+fun <A> Tuple3<*, *, A>.idx3() = TupleIdx3(this)
+fun <A> Tuple4<*, *, *, A>.idx4() = TupleIdx4(this)
+
 
 /** Extensible sequence indexing tree */
 open class Trie<K, V>(var value: V?) {

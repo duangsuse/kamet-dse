@@ -1,5 +1,6 @@
 package org.duangsuse.parserkt
 
+import java.lang.Exception
 import kotlin.reflect.KMutableProperty0
 
 // Pattern Seq, Decide, Repeat and (not)item, (not)elementIn, satisfy and string
@@ -13,6 +14,11 @@ fun <T> alwaysParsed(value: T): Parser<T> = {value}
 fun <T> Parser<T>.toDefault(defaultValue: T): AlwaysParser<T> = { this(it) ?: defaultValue }
 inline fun <T> Parser<T>.alsoDo(crossinline op: Input.(T) -> Unit): Parser<T> = Piped(this) { it?.also { this.op(it) }  } // also, apply
 inline fun <T, R> Parser<T>.convert(crossinline transform: (T) -> R): Parser<R> = { this(it)?.let(transform) } // let, run
+inline fun <T, R> Parser<T>.convertCatching(crossinline transform: (T) -> R): Parser<R> = parse@ { s ->
+  this(s)?.let {
+    try { transform(it) } catch (e: Exception) { s.error(e.message ?: "error in converter"); null }
+  }
+}
 
 private typealias P<T> = Parser<T>
 inline fun <T> Input.runTo(assign: KMutableProperty0<T?>, p: P<T>): T? = p(this)?.also { assign.set(it) }
