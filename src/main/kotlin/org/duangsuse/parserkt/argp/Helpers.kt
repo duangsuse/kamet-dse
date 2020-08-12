@@ -11,19 +11,25 @@ fun arg(name: String, help: String, param: String? = null,
   = arg<String>(name, help, param, default_value, repeatable, convert)
 
 fun <R> Arg<String>.options(default_value: R? = null, vararg pairs: Pair<String, R>): Arg<R>
-  = Arg(name, "$help in: ${pairs.joinToString(", ") {it.first}}", param, default_value, repeatable, mapOf(*pairs)::getValue)
-fun Arg<String>.checkOptions(vararg pairs: Pair<String, String>) = options(defaultValue, *pairs)
+  = Arg(name, "$help in ${pairs.joinToString(", ") {it.first}}", param, default_value, repeatable, mapOf(*pairs)::getValue)
+fun Arg<String>.checkOptions(vararg strings: String) = options(defaultValue, *strings.map { it to it }.toTypedArray())
 
-class OneOrMore<E>(internal var value: E? = null): Iterable<E> {
+fun defineFlags(vararg pairs: Pair<String, String>): Array<Arg<*>>
+  = pairs.asIterable().map { arg("${it.first} ${it.second}", it.first.split("-").joinToString(" ")) }.toTypedArray()
+
+class OneOrMore<E>(internal var `_ value`: E? = null): Iterable<E> {
   private val list: MutableList<E> by lazy(::mutableListOf)
-  val size get() = list.size
+  val size get() = if (`_ value` != null) 1 else list.size
   fun add(item: E) { list.add(item) }
-  fun get() = value ?: error("use list[0]")
-  operator fun get(index: Int) = if (value == null) list[index] else error("not list")
-  override fun iterator(): Iterator<E> = if (value != null) listOf(value!!).iterator() else list.iterator()
-  override fun toString() = "${value ?: list}"
+  fun get() = `_ value` ?: error("use list[0]")
+  operator fun get(index: Int) = if (`_ value` != null) error("not list") else list[index]
+  override fun iterator(): Iterator<E> = if (`_ value` != null) listOf(`_ value`!!).iterator() else list.iterator()
+  override fun toString() = "${`_ value` ?: list}"
 }
 
+class NamedMap(internal val `_ map`: Map<String, Any>) {
+  inline fun <reified R> getAs(key: String) = key as R
+}
 
 internal fun <T> Iterable<T>.associateBySplit(keySelector: (T) -> Iterable<String>): Map<String, T> {
   val map: MutableMap<String, T> = mutableMapOf()
@@ -31,3 +37,8 @@ internal fun <T> Iterable<T>.associateBySplit(keySelector: (T) -> Iterable<Strin
   return map
 }
 internal fun String.split() = split(' ')
+internal fun Char.repeats(n: Int): String {
+  val sb = StringBuilder()
+  for (_t in 1..n) sb.append(this)
+  return sb.toString()
+}
