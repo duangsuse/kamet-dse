@@ -31,6 +31,16 @@ class NamedMap(internal val `_ map`: Map<String, Any>) {
   inline fun <reified R> getAs(key: String) = key as R
 }
 
+enum class TextCaps {
+  None, AllUpper, AllLower, Capitalized;
+  operator fun invoke(text: String) = when (this) {
+    None -> text
+    AllUpper -> text.toUpperCase()
+    AllLower -> text.toLowerCase()
+    Capitalized -> text.capitalize()
+  }
+}
+
 internal fun <T> Iterable<T>.associateBySplit(keySelector: (T) -> Iterable<String>): Map<String, T> {
   val map: MutableMap<String, T> = mutableMapOf()
   for (item in this) for (k in keySelector(item)) map[k] = item

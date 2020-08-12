@@ -121,24 +121,35 @@ open class ArgParser4<A,B,C,D>(
 
   private val params = listOf(p1, p2, p3, p4)
   private val allParams = (params + flags + (moreArgs ?: emptyList())).filter { it != noArg }
-  fun toString(row_max: Int = 70, head: String = "usage: ", epilogue: String = "", indent: String = "  ", colon: String = ": ", newline: Char = '\n'): String {
+  /** [caps]: (param to help) ; [row_max]: in summary, max line len ; [groups]: "*" to "Options", "a b c" to "SomeGroup" */
+  fun toString(
+    caps: Pair<TextCaps, TextCaps> = (TextCaps.None to TextCaps.None), row_max: Int = 70,
+    head: String = "Usage: ", epilogue: String = "",
+    indent: String = "  ", colon: String = ": ", newline: String = "\n",
+    groups: Map<String, String>? = null): String {
     val sb = StringBuilder(head)
     val pre = deftPrefix
+    val (capParam, capHelp) = caps
     if (itemMode == PositionalMode.MustBefore) sb.append(itemNames).append(' ')
     var rowSize = 0 // summary line breaks
     allParams.joinTo(sb, " ") {
       val surround: String = if (it.repeatable) "{}" else if (it.defaultValue != null) "()" else "[]"
-      var s = pre+it.joinedName() ; it.param?.run { s += " $this" }
+      var s = pre+it.joinedName() ; it.param?.run { s += " ${capParam(this)}" }
       val pad = if (rowSize >= row_max) "$newline${' '.repeats(head.length)}".also { rowSize = 0 } else ""
       pad + surround.let { c -> "${c[0]}$s${c[1]}" }.also { summary -> rowSize += summary.length }
     }
     if (itemMode == PositionalMode.MustAfter) sb.append(' ').append(itemNames)
     sb.append(newline) // detailed desc.
-    for (p in allParams) {
-      sb.append(indent).append(pre)
-        .append(p.joinedName()).append(colon).append(p.help)
+    fun appendDesc(p: Arg<*>, groupIndent: String) {
+      sb.append(groupIndent).append(indent).append(pre)
+        .append(p.joinedName()).append(colon).append(capHelp(p.help))
       p.defaultValue?.let { sb.append(" (default $it)") }
       sb.append(newline)
+    }
+    if (groups == null) { for (p in allParams) appendDesc(p, "") }
+    else { //v append groups if.
+      val grouping = allParams.groupBy { p -> groups.entries.firstOrNull { p.name in it.key.split() }?.value ?: groups["*"] ?: error("* required for default name") }
+      grouping.forEach { (g, ps) -> sb.append(g).append(colon).append(newline) ; ps.forEach { appendDesc(it, indent) } }
     }
     if (itemNames.isNotEmpty() && itemMode == PositionalMode.Disordered) sb.append("options can be mixed with items: ").append(itemNames)
     return sb.append(epilogue).toString()

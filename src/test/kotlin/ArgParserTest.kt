@@ -52,7 +52,7 @@ class ArgParserTest: BaseArgParserTest<String, String, String, String>(luaP) {
   }
   @Test fun itFormats() {
     assertEquals("""
-      usage: {-l name} [-e stat] (-hex n) [-i] [-v] [-E] [-] [--]
+      Usage: {-l name} [-e stat] (-hex n) [-i] [-v] [-E] [-] [--]
         -l: require library 'name' into global 'name'
         -e: execute string 'stat'
         -hex: just an option added for test (default FA)
@@ -63,11 +63,38 @@ class ArgParserTest: BaseArgParserTest<String, String, String, String>(luaP) {
         --: stop handling options
 
     """.trimIndent(), luaP.toString())
+    assertEquals("""
+      用法： {-l NAME} [-e STAT] (-hex N) [-i] [-v] [-E] [-] [--]哈。
+      | 参数-l呢，是Require library 'name' into global 'name'哈。
+      | 参数-e呢，是Execute string 'stat'哈。
+      | 参数-hex呢，是Just an option added for test (default FA)哈。
+      | 参数-i呢，是Enter interactive mode after executing 'script'哈。
+      | 参数-v呢，是Show version information哈。
+      | 参数-E呢，是Ignore environment variables哈。
+      | 参数-呢，是Stop handling options and execute stdin哈。
+      | 参数--呢，是Stop handling options哈。
+      就是这样，喵。
+    """.trimIndent(), luaP.toString(TextCaps.AllUpper to TextCaps.Capitalized, head="用法： ", epilogue="就是这样，喵。", indent="| 参数", colon="呢，是", newline="哈。\n"))
+    assertEquals("""
+      Usage: {-l name} [-e stat] (-hex n) [-i] [-v] [-E] [-] [--]
+      Options: 
+          -l: require library 'name' into global 'name'
+          -e: execute string 'stat'
+          -hex: just an option added for test (default FA)
+      Flags: 
+          -i: enter interactive mode after executing 'script'
+          -E: ignore environment variables
+      Help: 
+          -v: show version information
+          -: stop handling options and execute stdin
+          --: stop handling options
+
+    """.trimIndent(), luaP.toString(groups = mapOf("l e hex" to "Options", "i E" to "Flags", "*" to "Help")))
   }
   @Test fun unorderedFormats() {
     val pas = ArgParser4(arg("donkey", "donkey you rides", "name"), noArg, noArg, noArg, listOf("papa", "mama"))
     assertEquals("""
-      usage: [-donkey name]
+      Usage: [-donkey name]
         -donkey: donkey you rides
       options can be mixed with items: [papa, mama]
     """.trimIndent(), pas.toString())
@@ -106,7 +133,7 @@ class ExtendArgParserTest: BaseArgParserTest<String, Int, String, String>(myP) {
   }
   @Test fun format() {
     assertEquals("""
-      usage: [ah] [-name name] [-count -C count] [-v]
+      Usage: [ah] [-name name] [-count -C count] [-v]
         -name: name of the user
         -count -C: number of the widgets
         -v: enable verbose mode
@@ -138,7 +165,7 @@ class ExtendArgParserTest1: BaseArgParserTest<String, Int, File, String>(yourP) 
   }
   @Test fun format() {
     assertEquals("""
-      usage: (-name -N name) [-count -c count] {-I file} [-mode mode] [-h -help] [source, dest]
+      Usage: (-name -N name) [-count -c count] {-I file} [-mode mode] [-h -help] [source, dest]
         -name -N: name of the user (default Duckling)
         -count -c: number of widgets
         -I: directory to search for header files
@@ -203,7 +230,7 @@ class AWKArgParserTests: BaseArgParserTest<File, String, String, String>(AWKArgP
   }
   @Test fun format() {
     assertEquals("""
-        usage: (-file= -f -exec= -E path) (-field-separator= -F fs) {-assign= -v var=val} 
+        Usage: (-file= -f -exec= -E path) (-field-separator= -F fs) {-assign= -v var=val} 
                {-load= -l lib} [-characters-as-bytes -b] [-traditional -c] [-copyright -C] 
                [-gen-pot -g] [-bignum -M] [-use-lc-numeric -N] [-non-decimal-data -n] [-optimize -O] 
                [-posix -P] [-re-interval -r] [-no-optimize -s] [-sandbox -S] [-lint-old -t] 
