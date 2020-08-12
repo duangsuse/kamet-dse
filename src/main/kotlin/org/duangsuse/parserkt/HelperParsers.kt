@@ -80,3 +80,15 @@ open class ExpectClose {
 }
 
 fun <E> MutableList<E>.removeLast() = removeAt(lastIndex)
+
+inline fun <T> Iterable<T>.allWithNext(predicate: (T, T) -> Boolean): Boolean {
+  val xz = iterator()
+  var left = xz.next()
+  while (xz.hasNext()) {
+    val right = xz.next()
+    if (!predicate(left, right)) return false
+    else left = right
+  }
+  return true
+}
+fun <T, I:Comparable<I>> Iterable<T>.isDescendingSortedBy(selector: (T) -> I): Boolean = allWithNext { a, b -> selector(a) >= selector(b) }

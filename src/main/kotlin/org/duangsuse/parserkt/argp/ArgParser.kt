@@ -11,29 +11,8 @@ data class Arg<R>(
   val isFlag get() = (param == null)
   val firstName get() = name.split().first()
 }
-inline fun <reified R> arg(
-  name: String, help: String, param: String? = null,
-  default_value: R? = null, repeatable: Boolean = false, noinline convert: ((String) -> R)?): Arg<R>
-  = Arg(name, help, if (param == "") name.split(' ').first() else param, default_value, repeatable, convert)
-fun arg(name: String, help: String, param: String? = null,
-        default_value: String? = null, repeatable: Boolean = false, convert: ((String) -> String)? = { it })
-  = arg<String>(name, help, param, default_value, repeatable, convert)
 
-fun <R> Arg<String>.options(default_value: R? = null, vararg pairs: Pair<String, R>): Arg<R>
-  = Arg(name, "$help in: ${pairs.joinToString(", ") {it.first}}", param, default_value, repeatable, mapOf(*pairs)::getValue)
-fun Arg<String>.checkOptions(vararg pairs: Pair<String, String>) = options(defaultValue, *pairs)
-
-class OneOrMore<E>(internal var value: E? = null): Iterable<E> {
-  private val list: MutableList<E> by lazy(::mutableListOf)
-  val size get() = list.size
-  fun add(item: E) { list.add(item) }
-  fun get() = value ?: error("use list[0]")
-  operator fun get(index: Int) = if (value == null) list[index] else error("not list")
-  override fun iterator(): Iterator<E> = if (value != null) listOf(value!!).iterator() else list.iterator()
-  override fun toString() = "${value ?: list}"
-}
 private typealias OM<E> = OneOrMore<E>
-
 open class ParseResult<A, B, C, D>(
   val tup: Tuple4<OM<A>, OM<B>, OM<C>, OM<D>> = Tuple4(OM(), OM(), OM(), OM()),
   var flags: String = "", val items: MutableList<String> = mutableListOf())
@@ -49,8 +28,8 @@ open class ArgParser4<A,B,C,D>(
   val p3: Arg<C>, val p4: Arg<D>,
   val itemNames: List<String> = emptyList(), val itemMode: PositionalMode = PositionalMode.Disordered,
   val autoSplit: List<String> = emptyList(), vararg val flags: Arg<*>) {
-  open val prefix = arrayOf("--", "-")
-  inner class Driver(args: Array<out String>): SwitchParser<ParseResult<A, B, C, D>>(args, *prefix) {
+  open val prefixes = listOf("--", "-")
+  inner class Driver(args: ArgArray): SwitchParser<ParseResult<A, B, C, D>>(args, prefixes) {
     override val res = ParseResult<A, B, C, D>()
     private inline val tup get() = res.tup
     @Suppress("UNCHECKED_CAST") // dynamic type
@@ -69,23 +48,20 @@ open class ArgParser4<A,B,C,D>(
     private val caseName = if (itemMode == PositionalMode.MustBefore) "all-before" else "all-after"
     private fun itemFail(case_name: String): Nothing = parseError("too $case_name items (all $itemNames)")
     private fun positFail(): Nothing = parseError("reading ${res.items}: should $caseName options")
-    private inline val itemLess get() = res.items.size < itemNames.size
+    private inline val isItemLess get() = res.items.size < itemNames.size
     override fun onItem(text: String) = res.items.plusAssign(text).also {
-      when (itemMode) {
-        PositionalMode.Disordered -> return@also
-        else -> { lastPosit++
-          when {
-            itemMode == PositionalMode.MustAfter && pos == 1 -> positFail()
-            (pos != lastPosit) ->
-              if (itemMode == PositionalMode.MustAfter && lastPosit == 0 +1) lastPosit = pos // one chance, late-initial posit
-              else positFail() // zero initiated posit, fail.
-          }
-          if (res.items.size > itemNames.size) itemFail("many")
-        }
+      if (itemMode == PositionalMode.Disordered) return@also
+      lastPosit++ // check continuous (ClosedRange)
+      when {
+        itemMode == PositionalMode.MustAfter && pos == 1 -> positFail() // no first-appear.
+        (pos != lastPosit) ->
+          if (itemMode == PositionalMode.MustAfter && lastPosit == 0 +1) lastPosit = pos // one chance, late-initial posit
+          else positFail() // zero initiated posit, fail.
       }
+      if (res.items.size > itemNames.size) itemFail("many")
     }
     override fun onPrefix(name: String) {
-      if (itemMode == PositionalMode.MustBefore && itemLess) itemFail("less")
+      if (itemMode == PositionalMode.MustBefore && isItemLess) itemFail("less")
       flagMap[name]?.let {
         if (it == helpArg) printHelp().also { res.flags += 'h' } // suppress post chk. in [run]
         res.flags += it.convert?.invoke(name) ?: it.firstName ; return
@@ -107,15 +83,15 @@ open class ArgParser4<A,B,C,D>(
 
     private fun parseError(message: String): Nothing = throw ParseError(message)
     override fun run() = super.run().also {
-      if (itemMode == PositionalMode.MustAfter && itemLess && 'h' !in it.flags) itemFail("less")
+      if (itemMode == PositionalMode.MustAfter && isItemLess && 'h' !in it.flags) itemFail("less")
     }
   }
-  fun run(args: Array<out String>) = Driver(args).run()
+  fun run(args: ArgArray) = Driver(args).run()
   private val params = listOf(p1, p2, p3, p4)
   private val allParams = (params + flags).filter { it != noArg }
-  fun toString(head: String = "usage: ", epilogue: String = "", indent: String = "  ", comma: String = ": ", newline: Char = '\n'): String {
+  fun toString(head: String = "usage: ", epilogue: String = "", indent: String = "  ", colon: String = ": ", newline: Char = '\n'): String {
     val sb = StringBuilder(head)
-    val pre = prefix.last()
+    val pre = prefixes.last()
     if (itemMode == PositionalMode.MustBefore) sb.append(itemNames).append(' ')
     allParams.joinTo(sb, " ") {
       val surround: String = if (it.repeatable) "{}" else if (it.defaultValue != null) "()" else "[]"
@@ -126,25 +102,19 @@ open class ArgParser4<A,B,C,D>(
     sb.append(newline) // detailed desc.
     for (p in allParams) {
       sb.append(indent).append(pre)
-        .append(p.joinedName()).append(comma).append(p.help)
+        .append(p.joinedName()).append(colon).append(p.help)
       p.defaultValue?.let { sb.append(" (default $it)") }
       sb.append(newline)
     }
     if (itemNames.isNotEmpty() && itemMode == PositionalMode.Disordered) sb.append("options can be mixed with items: ").append(itemNames)
     return sb.append(epilogue).toString()
   }
+  private fun Arg<*>.joinedName() = name.split().joinToString(" ${prefixes.last()}")
   override fun toString() = toString(epilogue = "")
   protected open fun printHelp() = println(toString())
-  private fun Arg<*>.joinedName() = name.split().joinToString(" ${prefix.last()}")
 }
 
 open class ArgParser3<A,B,C>(p1: Arg<A>, p2: Arg<B>, p3: Arg<C>, vararg flags: Arg<*>): ArgParser4<A,B,C,String>(p1, p2, p3, noArg, flags=*flags)
 open class ArgParser2<A,B>(p1: Arg<A>, p2: Arg<B>, vararg flags: Arg<*>): ArgParser4<A,B,String,String>(p1, p2, noArg, noArg, flags=*flags)
 open class ArgParser1<A>(p1: Arg<A>, vararg flags: Arg<*>): ArgParser4<A,String,String,String>(p1, noArg, noArg, noArg, flags=*flags)
 
-private fun <T> Iterable<T>.associateBySplit(keySelector: (T) -> Iterable<String>): Map<String, T> {
-  val map: MutableMap<String, T> = mutableMapOf()
-  for (item in this) for (k in keySelector(item)) map[k] = item
-  return map
-}
-private fun String.split() = split(' ')

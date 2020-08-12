@@ -1,10 +1,11 @@
 package org.duangsuse.parserkt.argp
 
 /**
- * Simple argument parser driver, use [arg] for arguments when [onPrefix], use [extractArg] for args like `-Ts`/`-T s`,
+ * Simple argument parser driver, use [arg] for arguments when [onPrefix], use [extractArg] for args like `-Ts`/`-T s`;
  *  throw [ParseStop] when stop is requested. [prefixes] __should be__ sorted descending by [String.length]
  */
-abstract class SwitchParser<R>(private val args: Array<out String>, private vararg val prefixes: String = arrayOf("--", "-")): Iterator<String> {
+abstract class SwitchParser<R>(private val args: ArgArray, private val prefixes: Iterable<String> = listOf("--", "-")): Iterator<String> {
+  constructor(args: ArgArray, vararg prefixes: String): this(args, prefixes.sortedByDescending { it.length })
   protected var pos = 0 ; private set
   override fun hasNext() = pos < args.size
   override fun next(): String = args[pos++]
@@ -25,16 +26,16 @@ abstract class SwitchParser<R>(private val args: Array<out String>, private vara
   object ParseStop: Exception()
 
   open fun run(): R {
-    var argIndex = 1
+    var argCount = 1
     while (hasNext()) try {
       val arg = next().also { currentArg = it }
       prefixes.firstOrNull { arg.startsWith(it) }?.let {
         val name = arg.substring(it.length)
         checkPrefixForName(name, it)
-        onPrefix(name) } ?: onItem(arg)
-      argIndex++
+        onPrefix(name) /*or*/} ?: onItem(arg)
+      argCount++
     } catch (_: ParseStop) { break }
-      catch (e: Throwable) { throw ParseError("parse fail near $currentArg (#$pos, arg $argIndex): ${e.message}", e) }
+      catch (e: Throwable) { throw ParseError("parse fail near $currentArg (#$pos, arg $argCount): ${e.message}", e) }
     return res
   }
   companion object {

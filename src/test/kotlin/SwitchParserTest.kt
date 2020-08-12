@@ -1,3 +1,4 @@
+import org.duangsuse.kamet.irbuild.LTypes.array
 import org.duangsuse.parserkt.argp.SwitchParser
 import kotlin.test.Test
 import kotlin.test.assertEquals
