@@ -48,7 +48,7 @@ enum class TextCaps {
   }
 }
 
-internal fun <T> Iterable<T>.associateBySplit(keySelector: (T) -> Iterable<String>): Map<String, T> {
+internal fun <T> Iterable<T>.associateByAll(keySelector: (T) -> Iterable<String>): Map<String, T> {
   val map: MutableMap<String, T> = mutableMapOf()
   for (item in this) for (k in keySelector(item)) map[k] = item
   return map

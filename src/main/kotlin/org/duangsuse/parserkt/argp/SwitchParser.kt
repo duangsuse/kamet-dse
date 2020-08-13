@@ -24,17 +24,19 @@ abstract class SwitchParser<R>(private val args: ArgArray, private val prefixes:
   class ParseError(message: String, exception: Throwable? = null): Error(message, exception)
   object ParseStop: Exception()
 
+  protected fun onArg(text: String) {
+    prefixes.firstOrNull { text.startsWith(it) }?.let {
+      val name = text.substring(it.length)
+      checkPrefixForName(name, it)
+      onPrefix(name) /*or*/} ?: onItem(text)
+  }
   open fun run(): R {
     val (capPre, capMsg) = prefixMessageCaps()
     fun msgFmt(ex: Throwable) = capMsg(": ${ex.message}")
     var argCount = 1
     while (hasNext()) try {
       val arg = next().also { currentArg = it }
-      prefixes.firstOrNull { arg.startsWith(it) }?.let {
-        val name = arg.substring(it.length)
-        checkPrefixForName(name, it)
-        onPrefix(name) /*or*/} ?: onItem(arg)
-      argCount++
+      onArg(arg) ; argCount++
     } catch (_: ParseStop) { break }
       catch (e: IllegalArgumentException) { throw IllegalArgumentException(capPre("bad argument $argCount, $currentArg")+msgFmt(e), e) }
       catch (e: Throwable) { throw ParseError(capPre("parse fail near $currentArg (#$pos, arg $argCount)")+msgFmt(e), e) }

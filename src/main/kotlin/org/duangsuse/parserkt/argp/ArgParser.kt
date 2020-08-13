@@ -9,8 +9,9 @@ data class Arg<R>(
   val name: String, val help: String, val param: String?, val defaultValue: R?,
   val repeatable: Boolean, val convert: Convert<R>) {
   val isFlag get() = (param == null)
-  val firstName get() = name.split().first()
-  val secondName get() = name.split().run { if (size < 2) first() else this[1] }
+  val names get() = name.split()
+  val firstName get() = names.first()
+  val secondName get() = names.run { if (size < 2) first() else this[1] }
 }
 
 private typealias OM<E> = OneOrMore<E>
@@ -34,18 +35,18 @@ open class ArgParser4<A,B,C,D>(
   val moreArgs: List<Arg<out Any>>? = null) {
   open val prefixes = listOf("--", "-")
   inner class Driver(args: ArgArray): SwitchParser<ParseResult<A, B, C, D>>(args, prefixes) {
-    private val dynamicNameMap = moreArgs?.run { associateBySplit { it.name.split() } }
+    private val dynamicNameMap = moreArgs?.run { associateByAll { it.names } }
     private val dynamicResult: MutableMap<String, DynOM>? = if (moreArgs != null) mutableMapOf() else null
 
     override val res = ParseResult<A, B, C, D>(named = dynamicResult?.let(::NamedMap))
     private inline val tup get() = res.tup
     @Suppress("UNCHECKED_CAST") // dynamic type
     private val ps = listOf(p1 to tup.e1, p2 to tup.e2, p3 to tup.e3, p4 to tup.e4).filter { it.first != noArg } as List<Pair<Arg<*>, DynOM>>
-    private val nameMap = ps.associateBySplit { it.first.name.split() }.toMutableMap()
-    private val flagMap = flags.asIterable().associateBySplit { it.name.split() } //v split prefix try order always defined by hand
+    private val nameMap = ps.associateByAll { it.first.names }.toMutableMap()
+    private val flagMap = flags.asIterable().associateByAll { it.names } //v split prefix try order always defined by hand
     private val autoSplits by lazy { autoSplit.mapNotNull { nameMap[it]?.first ?: dynamicNameMap?.get(it) } }
     init {
-      ps.forEach { val p = it.first ; if (p.isFlag) error("flag ${p.firstName} should be putted in ArgParser(flag = ...)") }
+      for ((p, _) in ps) if (p.isFlag) error("flag ${p.firstName} should be putted in ArgParser(flag = ...)")
     }
 
     private var lastPosit = 0 //v all about positional args
@@ -55,8 +56,10 @@ open class ArgParser4<A,B,C,D>(
       val (capPre, capMsg) = prefixMessageCaps()
       parseError(capPre("reading ${res.items}: ")+capMsg("should $caseName options"))
     }
-    private fun itemFail(case_name: String): Nothing = parseError(prefixMessageCaps().first("too $case_name items (all $itemNames)"))
+    private fun itemFail(case_name: String): Nothing
+      = parseError(prefixMessageCaps().first("too $case_name items (all $itemNames)"))
     private inline val isItemLess get() = !isVarItem && res.items.size < itemNames.size
+    private fun argDuplicateError(name: String): Nothing = parseError(prefixMessageCaps().first("argument $name repeated"))
 
     override fun onItem(text: String) = res.items.plusAssign(text).also {
       if (itemMode == PositionalMode.Disordered) return@also
@@ -67,46 +70,59 @@ open class ArgParser4<A,B,C,D>(
       }
       if (!isVarItem && res.items.size > itemNames.size) itemFail("many")
     }
+    private fun checkPosition(): Unit = when {
+      (itemMode == PositionalMode.MustBefore && isItemLess) -> itemFail("less heading")
+      (itemMode == PositionalMode.MustAfter && res.items.isNotEmpty()) -> positFail()
+      else -> {} //^ appeared-first is ok when items only, so no appear after param.
+    }
+    private fun readFlag(name: String): Boolean = flagMap[name]?.let {
+      if (it == helpArg) printHelp().also { res.flags += 'h' } // suppress post chk. in [Driver.run]
+      res.flags += it.convert?.invoke(name) ?: it.secondName ; true
+    } ?: false
+    private fun readDynamicArg(name: String): Boolean {
+      fun add(p: Arg<*>, res: Any) {
+        dynamicResult!!
+        val newOm = dynamicResult.getOrPut(p.firstName, { DynOM() })
+        if (p.repeatable) newOm.add(res)
+        else newOm.let { sto -> sto.value =
+          if (sto.value == null) res
+          else argDuplicateError(name)
+        }
+      } //^ just like last lines of onPrefix
+      dynamicNameMap?.get(name)?.let { p -> add(p, read(p)) ; return true }
+      return false
+    }
+    private var autoSplitRes: Any? = null
+    private fun read(p: Arg<*>): Any { // support multi-param
+      autoSplitRes?.let { return it }
+      val params = p.param?.split() ?: return p.defaultValue ?: error("dynamic arg w/o param or default is invalid")
+      val converter = p.convert ?: { it }
+      val argFull = currentArg //< full name --arg
+      return params.singleOrNull()?.let { arg(it, converter)!! } //v errors looks like missing --duck's name / 's age, or bad argument in
+        ?: params.joinToString("\u0000") { currentArg = argFull ; arg(it) }.also { currentArg = "in $argFull" }.let(converter)!!
+    }
     override fun onPrefix(name: String) {
-      when { // check position
-        (itemMode == PositionalMode.MustBefore && isItemLess) -> itemFail("less heading")
-        (itemMode == PositionalMode.MustAfter && res.items.isNotEmpty()) -> positFail()
-        //^ appeared-first is ok when items only, so no appear after param.
-      }
-      flagMap[name]?.let {
-        if (it == helpArg) printHelp().also { res.flags += 'h' } // suppress post chk. in [Driver.run]
-        res.flags += it.convert?.invoke(name) ?: it.secondName ; return
-      } //^flag  //v read, auto-split
-      var split: Any? = null
-      fun read(p: Arg<*>): Any { // support multi-param
-        split?.let { return it }
-        val params = p.param?.split() ?: return p.defaultValue ?: error("dynamic arg w/o param or default is invalid")
-        val converter = p.convert ?: { it }
-        val argFull = currentArg //< full name --arg
-        return params.singleOrNull()?.let { arg(it, converter)!! } //v errors looks like missing --duck's name / 's age, or bad argument in
-          ?: params.joinToString("\u0000") { currentArg = argFull ; arg(it) }.also { currentArg = "in $argFull" }.let(converter)!!
-      }
-      //v dynamic args and split helperFn
-      dynamicNameMap?.get(name)?.let { dynamicResult!![it.firstName] = OneOrMore(read(it)) ; return }
+      checkPosition()
+      if (readFlag(name) || readDynamicArg(name)) return
       fun autoSplit(): Pair<Arg<*>, DynOM>? {
-        for (sp in autoSplits) for (bang in sp.name.split()) // aliases
-          extractArg(bang, name)?.let {
-            checkAutoSplitForName(bang, it) ; split = sp.convert?.invoke(it) ?: it
-            val sto = sp.firstName.let { k -> nameMap[k]?.second ?: dynamicResult?.getOrPutOM(k) }
-            return sp to sto!!
-          }
+        for (sp in autoSplits) for (prefix in sp.names) extractArg(prefix, name)?.let {
+          checkAutoSplitForName(prefix, it) ; autoSplitRes = sp.convert?.invoke(it) ?: it
+          val sto = sp.firstName.let { k -> nameMap[k]?.second ?: dynamicResult?.getOrPutOM(k) }
+          return sp to sto!!
+        } //^ support arg name aliases % dynRes
         return null
-      } //v null elvis chain
-      val (p, sto) = nameMap[name] ?: autoSplit() ?: rescuePrefix(name).let {
-        val key = it.firstName
-        val dynSto = (dynamicResult ?: error("add moreArgs for rescue")).getOrPutOM(key)
-        (it to dynSto).also { pair -> nameMap[key] = pair }
-      } //^ dynamic interpret for prefix (also cached)
+      } //^ prefix ordered scan & dynRes  //v null elvis chain
+      val (p, sto) = nameMap[name] ?: autoSplit() ?: dynamicInterpret(name)
       if (p.repeatable) sto.add(read(p))
       else sto.value =
         if (sto.value == null) read(p)
-        else parseError(prefixMessageCaps().first("argument $name repeated"))
+        else argDuplicateError(name)
     }
+    private fun dynamicInterpret(name: String) = rescuePrefix(name).let {
+      val key = it.firstName
+      val dynSto = (dynamicResult ?: error("add moreArgs for rescue")).getOrPutOM(key)
+      (it to dynSto).also { pair -> nameMap[key] = pair }
+    } //^ dynamic interpret for prefix (also cached)
 
     private fun MutableMap<String, DynOM>.getOrPutOM(key: String) = getOrPut(key) { DynOM() }
     private fun parseError(message: String): Nothing = throw ParseError(message)
@@ -124,30 +140,27 @@ open class ArgParser4<A,B,C,D>(
     fun backRun(result: ParseResult<A, B, C, D>, use_shorthand: Boolean): ArgArray {
       val argLine: MutableList<String> = mutableListOf()
       fun addItems() = result.items.forEach { argLine.add(it) } // order branched
-      if (itemMode == PositionalMode.MustBefore) addItems()
-      result.flags.forEach { argLine.add("$deftPrefix${it}") }
       fun addArg(p: Arg<*>, res: Any) {
         if (res == p.defaultValue) { return }
         argLine.add("$deftPrefix${if (use_shorthand) p.secondName else p.firstName}")
-        if (p.param?.split()?.size?:0 > 1)
-          when (res) { // multi-param
-            is Pair<*, *> -> res.run { argLine.add("$first"); argLine.add("$second") }
-            is Iterable<*> -> res.mapTo(argLine, Any?::toString)
-          }
-        else argLine.add("$res")
+        if (p.param?.split()?.size?:0 > 1) when (res) { // multi-param
+          is Pair<*, *> -> res.run { argLine.add("$first"); argLine.add("$second") }
+          is Iterable<*> -> res.mapTo(argLine, Any?::toString)
+        } else argLine.add("$res") //< single param
       }
       fun addArg(p: Arg<*>, sto: DynOM) {
         fun add(res: Any) = addArg(p, res)
-        sto.value?.let(::add)
-          ?: sto.forEach(::add)
+        sto.value?.let(::add) ?:/*repeated*/ sto.forEach(::add)
       }
+      if (itemMode == PositionalMode.MustBefore) addItems()
+      result.flags.forEach { argLine.add("$deftPrefix${it}") }
       for ((p, sto) in ps.map { it.first }.zip(result.tup.run { listOf(e1, e2, e3, e4) })) {
         @Suppress("unchecked_cast") addArg(p, sto as DynOM)
       } //^ append for ps
       result.named?.map?.forEach { k, v ->
         val p = dynamicNameMap?.get(k) ?: error("nonexistent arg named $k")
         addArg(p, v)
-      }
+      } //^ and for dynRes
       if (itemMode == PositionalMode.MustAfter || itemMode == PositionalMode.Disordered) addItems()
       return argLine.toTypedArray()
     }
@@ -159,8 +172,8 @@ open class ArgParser4<A,B,C,D>(
   fun run(args: ArgArray) = Driver(args).also { lastDriver = it }.run()
   fun backRun(result: ParseResult<A, B, C, D>, use_shorthand: Boolean = false) = (lastDriver ?: error("run once first")).backRun(result, use_shorthand)
 
-  private val params = listOf(p1, p2, p3, p4)
-  private val allParams = (params + flags + (moreArgs ?: emptyList())).filter { it != noArg }
+  private val typedArgs = listOf(p1, p2, p3, p4)
+  private val allArgs = (typedArgs + flags + (moreArgs ?: emptyList())).filter { it != noArg }
   /** [caps]: (param to help) ; [row_max]: in summary, max line len ; [groups]: "*" to "Options", "a b c" to "SomeGroup" */
   fun toString(
     caps: Pair<TextCaps, TextCaps> = (TextCaps.None to TextCaps.None), row_max: Int = 70,
@@ -171,14 +184,14 @@ open class ArgParser4<A,B,C,D>(
     val pre = deftPrefix
     val (capParam, capHelp) = caps
     fun appendItemNames() = itemNames.joinTo(sb, space) { "<$it>" }
-    if (itemMode == PositionalMode.MustBefore) appendItemNames().append(space)
-    fun appendSummary(sb: StringBuilder) = allParams.joinToBreakLines(sb, space, row_max, newline+' '.repeats(head.length)) {
+    fun appendSummary(sb: StringBuilder) = allArgs.joinToBreakLines(sb, space, row_max, newline+' '.repeats(head.length)) {
       val surround: String = if (it.repeatable) "{}" else if (it.defaultValue != null) "()" else "[]"
       sb.append(surround[0]).append(pre).append(it.joinedName())
       it.param?.split()?.joinTo(sb, comma, prefix = space) { param -> capParam(param) }
       sb.append(surround[1])
       return@joinToBreakLines ""
-    }
+    } //v begin building.
+    if (itemMode == PositionalMode.MustBefore) appendItemNames().append(space)
     if (transform_summary == null) appendSummary(sb) else sb.append(appendSummary(StringBuilder()).toString().let(transform_summary))
     if (itemMode == PositionalMode.MustAfter) { sb.append(space) ; appendItemNames() }
     sb.append(newline) // detailed desc.
@@ -188,9 +201,9 @@ open class ArgParser4<A,B,C,D>(
       p.defaultValue?.let { sb.append(" (default $it)") }
       sb.append(newline)
     }
-    if (groups == null) { for (p in allParams) appendDesc(p, "") }
+    if (groups == null) { for (p in allArgs) appendDesc(p, "") }
     else { //v append groups if.
-      val grouping = allParams.groupBy { p -> groups.entries.firstOrNull { p.name in it.key.split() }?.value ?: groups["*"] ?: error("* required for default name") }
+      val grouping = allArgs.groupBy { p -> groups.entries.firstOrNull { p.name in it.key.split() }?.value ?: groups["*"] ?: error("* required for default name") }
       grouping.forEach { (g, ps) -> sb.append(g).append(colon).append(newline) ; ps.forEach { appendDesc(it, indent) } }
     }
     if (itemNames.isNotEmpty() && itemMode == PositionalMode.Disordered) sb.append("options can be mixed with items: ".let(capHelp::invoke)).append(itemNames)
@@ -202,10 +215,10 @@ open class ArgParser4<A,B,C,D>(
   override fun toString() = toString(epilogue = "")
   protected open fun printHelp() = println(toString())
   protected open fun prefixMessageCaps() = TextCaps.nonePair
-  /** Return-super if [name] still unknown, please note that [Arg.help] / (backRun) is never used and one of [Arg.param], [Arg.defaultValue] must be provided */
+  /** Return-super if [name] still unknown, please note that [Arg.help] / (backRun) is never used, and one of [Arg.param] / [Arg.defaultValue] must be provided */
   protected open fun rescuePrefix(name: String): Arg<*> { throw SwitchParser.ParseError("$name unknown") }
   protected open fun checkAutoSplitForName(name: String, param: String) {}
-  /** Call-super first if and args like "--c" are rejected */
+  /** Call-super first if and args like "--c" are rejected, note no [autoSplit] done on it's [name] */
   protected open fun checkPrefixForName(name: String, prefix: String) {
     val (capPre, _) = prefixMessageCaps()
     if (prefix == "--" && name.length == 1) throw SwitchParser.ParseError(capPre("single-char shorthand should like: -$name"))
