@@ -5,7 +5,7 @@ import kotlin.test.*
 private var printed = ""
 val luaP = ArgParser3(
   arg("l", "require library 'name' into global 'name'", "name", repeatable = true),
-  arg("e", "execute string 'stat'", "stat mode", convert = multiParam { it[0] to it[1].also { m -> require(m != "fail") } }),
+  arg("e", "execute string 'stat'", "stat mode", "a" to "b", convert = multiParam { it[0] to it[1].also { m -> require(m != "fail") } }),
   arg("hex", "just an option added for test", "n", "FA") { it.toInt(16).toString() },
   arg("i", "enter interactive mode after executing 'script'"), //^ errors should not looks like -e's stat's mode, that's error.
   arg("v", "show version information") { printed += "Lua 5.3" ; SwitchParser.stop() },
@@ -54,9 +54,9 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String,Unit
   }
   @Test fun itFormats() {
     assertEquals("""
-      Usage: {-l name} [-e stat, mode] (-hex n) [-i] [-v] [-E] [-] [--]
+      Usage: {-l name} (-e stat, mode) (-hex n) [-i] [-v] [-E] [-] [--]
         -l: require library 'name' into global 'name'
-        -e: execute string 'stat'
+        -e: execute string 'stat' (default (a, b))
         -hex: just an option added for test (default FA)
         -i: enter interactive mode after executing 'script'
         -v: show version information
@@ -66,9 +66,9 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String,Unit
 
     """.trimIndent(), luaP.toString())
     assertEquals("""
-      用法： {-l NAME} [-e STAT, MODE] (-hex N) [-i] [-v] [-E] [-] [--]哈。
+      用法： {-l NAME} (-e STAT, MODE) (-hex N) [-i] [-v] [-E] [-] [--]哈。
       | 参数-l呢，是Require library 'name' into global 'name'哈。
-      | 参数-e呢，是Execute string 'stat'哈。
+      | 参数-e呢，是Execute string 'stat' (default (a, b))哈。
       | 参数-hex呢，是Just an option added for test (default FA)哈。
       | 参数-i呢，是Enter interactive mode after executing 'script'哈。
       | 参数-v呢，是Show version information哈。
@@ -78,10 +78,10 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String,Unit
       就是这样，喵。
     """.trimIndent(), luaP.toString(TextCaps.AllUpper to TextCaps.Capitalized, head="用法： ", epilogue="就是这样，喵。", indent="| 参数", colon="呢，是", newline="哈。\n"))
     assertEquals("""
-      Usage: {-l name} [-e stat, mode] (-hex n) [-i] [-v] [-E] [-] [--]
+      Usage: {-l name} (-e stat, mode) (-hex n) [-i] [-v] [-E] [-] [--]
       Options: 
           -l: require library 'name' into global 'name'
-          -e: execute string 'stat'
+          -e: execute string 'stat' (default (a, b))
           -hex: just an option added for test (default FA)
       Flags: 
           -i: enter interactive mode after executing 'script'
@@ -105,11 +105,11 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String,Unit
 }
 
 val myP = object: ArgParser4<String,Int,Unit,Unit>(
-  arg("name", "name of the user", ""),
-  arg<Int>("count C", "number of the widgets", "") { it.toInt() },
+  arg("name", "name of the user", "", "Alice"),
+  arg<Int>("count C", "number of the widgets", "", 1) { it.toInt() },
   noArg, noArg,
   moreArgs = listOf(
-    arg("xxx", "added for rescue", ""),
+    arg("xxx", "added for rescue", "", ""),
     arg("map", "build map", "k v", repeatable = true, convert = multiParam { it[0] to it[1] })),
   itemNames=listOf("ah"), itemMode=PositionalMode.MustBefore,
   autoSplit=listOf("name", "count"),
@@ -168,11 +168,11 @@ class ExtendArgParserTest: BaseArgParserTest<String, Int, Unit,Unit>(myP) {
   }
   @Test fun format() {
     assertEquals("""
-      Usage: <ah> [-name name] [-count -C count] [-v] [-xxx xxx] {-map k, v}
-        -name: name of the user
-        -count -C: number of the widgets
+      Usage: <ah> (-name name) (-count -C count) [-v] (-xxx xxx) {-map k, v}
+        -name: name of the user (default Alice)
+        -count -C: number of the widgets (default 1)
         -v: enable verbose mode
-        -xxx: added for rescue
+        -xxx: added for rescue (default none)
         -map: build map
 
     """.trimIndent(), myP.toString())
@@ -183,7 +183,7 @@ val yourP = ArgParser4(
   arg("name N", "name of the user", "", "Duckling"),
   arg<Int>("count c", "number of widgets", "") { it.toInt() },
   arg<File>("I", "directory to search for header files", "file", repeatable = true) { File(it) },
-  arg("mode", "mode of operation", "").checkOptions("fast", "small", "quite"),
+  arg("mode", "mode of operation", "", "small").checkOptions("fast", "small", "quite"),
   itemNames = listOf("source", "dest"), itemMode = PositionalMode.MustAfter,
   flags = *arrayOf(helpArg)
 )
@@ -206,16 +206,19 @@ class ExtendArgParserTest1: BaseArgParserTest<String, Int, File, String>(yourP) 
   }
   @Test fun format() {
     assertEquals("""
-      Usage: (-name -N name) [-count -c count] {-I file} [-mode mode] [-h -help] <source> <dest>
+      Usage: (-name -N name) [-count -c count] {-I file} (-mode mode) [-h -help] <source> <dest>
         -name -N: name of the user (default Duckling)
         -count -c: number of widgets
         -I: directory to search for header files
-        -mode: mode of operation in fast, small, quite
+        -mode: mode of operation in fast, small, quite (default small)
         -h -help: print this help
 
     """.trimIndent(), yourP.toString())
   }
 }
+
+fun argFileD(name: String, help: String, param: String = "path", default_value: File = noFile, repeatable: Boolean = false)
+  = argFile(name, help, param, default_value, repeatable, "")
 
 object AWKArgParser: ArgParser4<File, String, String, String>(
   argFile("file= f exec= E", "execute script file", "path", flags = ""),
@@ -240,13 +243,13 @@ object AWKArgParser: ArgParser4<File, String, String, String>(
   autoSplit = "F E v d D L l o p".split(),
   itemNames = listOf("..."), itemMode = PositionalMode.MustAfter,
   moreArgs = listOf(
-    arg<File>("dump-variables= d", "dump vars to file", "file") { File(it) },
-    arg<File>("debug= D", "debug", "file") { File(it) },
+    argFileD("dump-variables= d", "dump vars to file", "file"),
+    argFileD("debug= D", "debug", "file"),
     arg("source= e", "execute source", "code", "emm"),
-    arg<File>("include= i", "include file", "file") { File(it) },
-    arg("lint= L", "lint level", "").checkOptions("fatal", "invalid", "no-ext"),
-    arg<File>("pretty-print= o", "pretty print to", "file") { File(it) },
-    arg<File>("profile= p", "use profile", "file") { File(it) }
+    argFileD("include= i", "include file", "file"),
+    arg("lint= L", "lint level", "", "none").checkOptions("fatal", "invalid", "no-ext"),
+    argFileD("pretty-print= o", "pretty print to", "file"),
+    argFileD("profile= p", "use profile", "file")
   )
 ) {
 
@@ -280,39 +283,39 @@ class AWKArgParserTests: BaseArgParserTest<File, String, String, String>(AWKArgP
   }
   @Test fun format() {
     assertEquals("""
-          Usage: (-file= -f -exec= -E path) (-field-separator= -F fs) {-assign= -v var=val}
-                  {-load= -l lib} [-characters-as-bytes -b] [-traditional -c] [-copyright -C]
-                  [-gen-pot -g] [-bignum -M] [-use-lc-numeric -N] [-non-decimal-data -n]
-                  [-optimize -O] [-posix -P] [-re-interval -r] [-no-optimize -s]
-                  [-sandbox -S] [-lint-old -t] [-h -help] [-version -V] [-dump-variables= -d file]
-                  [-debug= -D file] (-source= -e code) [-include= -i file] [-lint= -L lint=]
-                  [-pretty-print= -o file] [-profile= -p file] <...>
-            -file= -f -exec= -E: execute script file (default )
-            -field-separator= -F: set field separator (default  	)
-            -assign= -v: assign variable
-            -load= -l: load library
-            -characters-as-bytes -b: characters as bytes
-            -traditional -c: traditional
-            -copyright -C: copyright
-            -gen-pot -g: gen pot
-            -bignum -M: bignum
-            -use-lc-numeric -N: use lc numeric
-            -non-decimal-data -n: non decimal data
-            -optimize -O: optimize
-            -posix -P: posix
-            -re-interval -r: re interval
-            -no-optimize -s: no optimize
-            -sandbox -S: sandbox
-            -lint-old -t: lint old
-            -h -help: print this help
-            -version -V: print version
-            -dump-variables= -d: dump vars to file
-            -debug= -D: debug
-            -source= -e: execute source (default emm)
-            -include= -i: include file
-            -lint= -L: lint level in fatal, invalid, no-ext
-            -pretty-print= -o: pretty print to
-            -profile= -p: use profile
+    Usage: (-file= -f -exec= -E path) (-field-separator= -F fs) {-assign= -v var=val}
+            {-load= -l lib} [-characters-as-bytes -b] [-traditional -c] [-copyright -C]
+            [-gen-pot -g] [-bignum -M] [-use-lc-numeric -N] [-non-decimal-data -n]
+            [-optimize -O] [-posix -P] [-re-interval -r] [-no-optimize -s]
+            [-sandbox -S] [-lint-old -t] [-h -help] [-version -V] (-dump-variables= -d file)
+            (-debug= -D file) (-source= -e code) (-include= -i file) (-lint= -L lint=)
+            (-pretty-print= -o file) (-profile= -p file) <...>
+      -file= -f -exec= -E: execute script file (default none)
+      -field-separator= -F: set field separator (default  	)
+      -assign= -v: assign variable
+      -load= -l: load library
+      -characters-as-bytes -b: characters as bytes
+      -traditional -c: traditional
+      -copyright -C: copyright
+      -gen-pot -g: gen pot
+      -bignum -M: bignum
+      -use-lc-numeric -N: use lc numeric
+      -non-decimal-data -n: non decimal data
+      -optimize -O: optimize
+      -posix -P: posix
+      -re-interval -r: re interval
+      -no-optimize -s: no optimize
+      -sandbox -S: sandbox
+      -lint-old -t: lint old
+      -h -help: print this help
+      -version -V: print version
+      -dump-variables= -d: dump vars to file (default none)
+      -debug= -D: debug (default none)
+      -source= -e: execute source (default emm)
+      -include= -i: include file (default none)
+      -lint= -L: lint level in fatal, invalid, no-ext (default none)
+      -pretty-print= -o: pretty print to (default none)
+      -profile= -p: use profile (default none)
 
     """.trimIndent(), p.toString())
   }

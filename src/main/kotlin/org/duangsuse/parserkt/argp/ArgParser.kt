@@ -19,10 +19,15 @@ private typealias DynOM = OM<Any>
 open class ParseResult<A, B, C, D>(
   val tup: Tuple4<OM<A>, OM<B>, OM<C>, OM<D>> = Tuple4(OM(), OM(), OM(), OM()),
   var flags: String = "", val items: MutableList<String> = mutableListOf(),
-  val named: NamedMap? = null)
+  val named: NamedMap? = null) {
+  val isEarlyStopped get() = ('h' in flags)
+}
 
 /** Order constraint for positional(no-prefix) args (comparing to prefix args) */
 enum class PositionalMode { MustBefore, MustAfter, Disordered }
+
+private typealias SL = List<String>/*< too long :) */
+private val eSL: SL = emptyList()
 
 val noArg: Arg<Unit> = arg<Unit>("\u0000", "") { error("noArg parsed") }
 val helpArg = arg("h help", "print this help") { SwitchParser.stop() }
@@ -30,8 +35,8 @@ val helpArg = arg("h help", "print this help") { SwitchParser.stop() }
 open class ArgParser4<A,B,C,D>(
   val p1: Arg<A>, val p2: Arg<B>,
   val p3: Arg<C>, val p4: Arg<D>,
-  val itemNames: List<String> = emptyList(), val itemMode: PositionalMode = PositionalMode.Disordered,
-  val autoSplit: List<String> = emptyList(), vararg val flags: Arg<*>,
+  val itemNames: SL=eSL, val itemMode: PositionalMode = PositionalMode.Disordered,
+  val autoSplit: SL=eSL, vararg val flags: Arg<*>,
   val moreArgs: List<Arg<out Any>>? = null) {
   open val prefixes = listOf("--", "-")
   inner class Driver(args: ArgArray): SwitchParser<ParseResult<A, B, C, D>>(args, prefixes) {
@@ -54,12 +59,12 @@ open class ArgParser4<A,B,C,D>(
     private val isVarItem = (itemNames == listOf("..."))
     private fun positFail(): Nothing {
       val (capPre, capMsg) = prefixMessageCaps()
-      parseError(capPre("reading ${res.items}: ")+capMsg("should $caseName options"))
+      throw ParseError(capPre("reading ${res.items}: ")+capMsg("should $caseName options"))
     }
     private fun itemFail(case_name: String): Nothing
-      = parseError(prefixMessageCaps().first("too $case_name items (all $itemNames)"))
+      = parseError("too $case_name items (all $itemNames)")
     private inline val isItemLess get() = !isVarItem && res.items.size < itemNames.size
-    private fun argDuplicateError(name: String): Nothing = parseError(prefixMessageCaps().first("argument $name repeated"))
+    private fun argDuplicateError(name: String): Nothing = parseError("argument $name repeated")
 
     override fun onItem(text: String) = res.items.plusAssign(text).also {
       if (itemMode == PositionalMode.Disordered) return@also
@@ -82,7 +87,7 @@ open class ArgParser4<A,B,C,D>(
     private fun readDynamicArg(name: String): Boolean {
       fun add(p: Arg<*>, res: Any) {
         dynamicResult!!
-        val newOm = dynamicResult.getOrPut(p.firstName, { DynOM() })
+        val newOm = dynamicResult.getOrPutOM(p.firstName)
         if (p.repeatable) newOm.add(res)
         else newOm.let { sto -> sto.value =
           if (sto.value == null) res
@@ -125,16 +130,19 @@ open class ArgParser4<A,B,C,D>(
     } //^ dynamic interpret for prefix (also cached)
 
     private fun MutableMap<String, DynOM>.getOrPutOM(key: String) = getOrPut(key) { DynOM() }
-    private fun parseError(message: String): Nothing = throw ParseError(message)
+    private fun parseError(message: String): Nothing = throw ParseError(prefixMessageCaps().first(message))
+    private fun missing(p: Arg<*>) = if (!p.repeatable) parseError("missing argument $deftPrefix${p.firstName} ${p.param}: ${p.help}") else null
+    private fun assignDefaultOrFail(p: Arg<*>, sto: DynOM) {
+      if (!p.repeatable) { sto.value = sto.value ?: p.defaultValue ?: missing(p) }
+      else { if (sto.size == 0) p.defaultValue?.let(sto::add) ?: missing(p) }
+    }
     override fun run() = super.run().also {
-      ps.forEach { (p, sto) ->
-        if (p.defaultValue != null) if (p.repeatable) sto.add(p.defaultValue) else sto.value = sto.value ?: p.defaultValue
-      }
-      moreArgs?.forEach { p -> val k = p.firstName ; if (p.defaultValue != null) dynamicResult!![k] = (dynamicResult[k] ?: OM(p.defaultValue)) }
-      //^ fill default values
-      if (itemMode == PositionalMode.MustAfter && 'h' !in it.flags) {
+      if (it.isEarlyStopped) return@also
+      ps.forEach { (p, sto) -> assignDefaultOrFail(p, sto) } //<v check & init default
+      moreArgs?.forEach { p -> assignDefaultOrFail(p, dynamicResult!!.getOrPutOM(p.firstName)) }
+      if (itemMode == PositionalMode.MustAfter) {
         if (isItemLess) itemFail("less")
-      } //^ less item parsed?
+      } //^[if] less item parsed?
       checkResult(it)
     }
     fun backRun(result: ParseResult<A, B, C, D>, use_shorthand: Boolean): ArgArray {
@@ -198,7 +206,7 @@ open class ArgParser4<A,B,C,D>(
     fun appendDesc(p: Arg<*>, groupIndent: String) {
       sb.append(groupIndent).append(indent).append(pre)
         .append(p.joinedName()).append(colon).append(capHelp(p.help))
-      p.defaultValue?.let { sb.append(" (default $it)") }
+      p.defaultValue?.let { sb.append(" (default ${it.toString().takeNotEmptyOr("none")})") }
       sb.append(newline)
     }
     if (groups == null) { for (p in allArgs) appendDesc(p, "") }
@@ -226,6 +234,6 @@ open class ArgParser4<A,B,C,D>(
   protected open fun checkResult(result: ParseResult<A, B, C, D>) {}
 }
 
-open class ArgParser3<A,B,C>(p1: Arg<A>, p2: Arg<B>, p3: Arg<C>, vararg flags: Arg<*>): ArgParser4<A,B,C,Unit>(p1, p2, p3, noArg, flags=*flags)
-open class ArgParser2<A,B>(p1: Arg<A>, p2: Arg<B>, vararg flags: Arg<*>): ArgParser3<A,B,Unit>(p1, p2, noArg, flags=*flags)
-open class ArgParser1<A>(p1: Arg<A>, vararg flags: Arg<*>): ArgParser2<A,Unit>(p1, noArg, flags=*flags)
+open class ArgParser3<A,B,C>(p1: Arg<A>, p2: Arg<B>, p3: Arg<C>, vararg flags: Arg<*>, items: SL=eSL): ArgParser4<A,B,C,Unit>(p1, p2, p3, noArg, flags=*flags, itemNames=items)
+open class ArgParser2<A,B>(p1: Arg<A>, p2: Arg<B>, vararg flags: Arg<*>, items: SL=eSL): ArgParser3<A,B,Unit>(p1, p2, noArg, flags=*flags, items=items)
+open class ArgParser1<A>(p1: Arg<A>, vararg flags: Arg<*>, items: SL=eSL): ArgParser2<A,Unit>(p1, noArg, flags=*flags, items=items)

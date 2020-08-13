@@ -61,6 +61,8 @@ internal fun Char.repeats(n: Int): String {
 }
 
 fun String.splitArgv() = split(" ").toTypedArray()
+fun String.takeUnlessEmpty() = takeUnless { it.isEmpty() }
+fun String.takeNotEmptyOr(value: String) = takeUnlessEmpty() ?: value
 
 inline fun <T> Iterable<T>.joinToBreakLines(sb: StringBuilder, separator: String, line_limit: Int, line_separator: String, crossinline transform: (T) -> CharSequence): StringBuilder {
   var lineSize = 0
