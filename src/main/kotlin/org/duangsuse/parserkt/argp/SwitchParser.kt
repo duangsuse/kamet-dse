@@ -9,23 +9,24 @@ abstract class SwitchParser<R>(private val args: ArgArray, private val prefixes:
   protected var pos = 0 ; private set
   override fun hasNext() = pos < args.size
   override fun next(): String = args[pos++]
-  private var currentArg = "?"
+  protected var currentArg = "?"
 
   protected abstract fun onPrefix(name: String)
   protected abstract fun onItem(text: String)
   protected abstract val res: R
 
-  protected open fun <R> arg(name: String, convert: (String) -> R): R
-    = if (!hasNext()) throw ParseError("expecting $name for $currentArg")
+  protected fun <R> arg(name: String, convert: (String) -> R): R
+    = if (!hasNext()) throw ParseError(prefixMessageCaps().first("expecting $name for $currentArg"))
       else next().also { currentArg += "'s $name" }.let(convert)
   protected fun arg(name: String) = arg(name) { it }
-  protected open fun checkPrefixForName(name: String, prefix: String) {
-    if (prefix == "--" && name.length == 1) throw ParseError("single-char shorthand should like: -$name")
-  }
+  protected open fun checkPrefixForName(name: String, prefix: String) {}
+  protected open fun prefixMessageCaps(): Pair<TextCaps, TextCaps> = TextCaps.nonePair
   class ParseError(message: String, exception: Throwable? = null): Error(message, exception)
   object ParseStop: Exception()
 
   open fun run(): R {
+    val (capPre, capMsg) = prefixMessageCaps()
+    fun msgFmt(ex: Throwable) = capMsg(": ${ex.message}")
     var argCount = 1
     while (hasNext()) try {
       val arg = next().also { currentArg = it }
@@ -35,7 +36,8 @@ abstract class SwitchParser<R>(private val args: ArgArray, private val prefixes:
         onPrefix(name) /*or*/} ?: onItem(arg)
       argCount++
     } catch (_: ParseStop) { break }
-      catch (e: Throwable) { throw ParseError("parse fail near $currentArg (#$pos, arg $argCount): ${e.message}", e) }
+      catch (e: IllegalArgumentException) { throw IllegalArgumentException(capPre("bad argument $argCount, $currentArg")+msgFmt(e), e) }
+      catch (e: Throwable) { throw ParseError(capPre("parse fail near $currentArg (#$pos, arg $argCount)")+msgFmt(e), e) }
     return res
   }
   companion object {

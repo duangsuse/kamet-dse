@@ -41,6 +41,9 @@ enum class TextCaps {
     AllLower -> text.toLowerCase()
     Capitalized -> text.capitalize()
   }
+  companion object Constants {
+    val nonePair = None to None
+  }
 }
 
 internal fun <T> Iterable<T>.associateBySplit(keySelector: (T) -> Iterable<String>): Map<String, T> {
@@ -54,6 +57,8 @@ internal fun Char.repeats(n: Int): String {
   for (_t in 1..n) sb.append(this)
   return sb.toString()
 }
+
+fun String.splitArgv() = split(" ").toTypedArray()
 
 inline fun <T> Iterable<T>.joinToBreakLines(sb: StringBuilder, separator: String, line_limit: Int, line_separator: String, crossinline transform: (T) -> CharSequence): StringBuilder {
   var lineSize = 0

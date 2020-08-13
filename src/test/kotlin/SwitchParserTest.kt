@@ -16,10 +16,10 @@ class SwitchParserTest {
   @Test fun itWorks1() {
     assertMessageEquals("parse fail near -l (#3, arg 2): expecting lib_name for -l", "-e", "print(1)", "-l")
     assertMessageEquals("parse fail near -x (#1, arg 1): x unknown", "-x")
-    assertMessageEquals("parse fail near -hex's n (#2, arg 1): For input string: \"af_0\"", "-hex", "af_0")
+    assertMessageEquals("bad argument 1, -hex's n: For input string: \"af_0\"", "-hex", "af_0")
   }
   private fun assertMessageEquals(expected: String, vararg args: String) {
-    val ex = assertFailsWith<SwitchParser.ParseError> { LuaSwitchParser(args).run() }
+    val ex = assertFailsWith<Throwable> { LuaSwitchParser(args).run() }
     assertEquals(expected, ex.message)
   }
 }

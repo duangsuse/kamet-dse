@@ -5,9 +5,9 @@ import kotlin.test.*
 private var printed = ""
 val luaP = ArgParser3(
   arg("l", "require library 'name' into global 'name'", "name", repeatable = true),
-  arg("e", "execute string 'stat'", "stat mode", convert = multiParam { it[0] to it[1] }),
+  arg("e", "execute string 'stat'", "stat mode", convert = multiParam { it[0] to it[1].also { m -> require(m != "fail") } }),
   arg("hex", "just an option added for test", "n", "FA") { it.toInt(16).toString() },
-  arg("i", "enter interactive mode after executing 'script'"),
+  arg("i", "enter interactive mode after executing 'script'"), //^ errors should not looks like -e's stat's mode, that's error.
   arg("v", "show version information") { printed += "Lua 5.3" ; SwitchParser.stop() },
   arg("E", "ignore environment variables"),
   arg("", "stop handling options and execute stdin") { SwitchParser.stop() },
@@ -15,13 +15,12 @@ val luaP = ArgParser3(
 )
 
 abstract class BaseArgParserTest<A,B,C,D>(val p: ArgParser4<A,B,C,D>) {
-  fun assertFailMessage(expected: String, args: String) = assertEquals(expected, assertFailsWith<SwitchParser.ParseError> { p.run(args.splitArgv()) }.message)
+  fun assertFailMessage(expected: String, args: String) = assertEquals(expected, assertFailsWith<Throwable> { p.run(args.splitArgv()) }.message)
   fun p(args: String) = p.run(args.splitArgv())
   fun backP(args: String) = p(args).let { p.run(p.backRun(it)) }
-  fun String.splitArgv() = split(" ").toTypedArray()
 }
 
-class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String, String>(luaP) {
+class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String,Unit>(luaP) {
   @Test fun itWorks() {
     assertEquals(listOf("a", "b"), p("-l a -l b").tup.e1.toList())
     p("-e hello stmt -l a -i -E --").run {
@@ -45,10 +44,13 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String, Str
   }
   @Test fun itFails() {
     assertFailMessage("parse fail near --E (#3, arg 2): single-char shorthand should like: -E", "--hex af --E")
-    assertFailMessage("parse fail near --hex's n (#2, arg 1): For input string: \".23\"", "--hex .23")
+    assertFailMessage("bad argument 1, --hex's n: For input string: \".23\"", "--hex .23")
     assertFailMessage("parse fail near -e (#5, arg 3): argument e repeated", "-e wtf mode x -e twice")
     assertEquals("flag wtf should be putted in ArgParser(flag = ...)",
       assertFailsWith<IllegalStateException> { ArgParser1(arg("wtf", "e mmm", param = null)).run("".splitArgv()) }.message)
+    assertFailMessage("parse fail near -e (#1, arg 1): expecting stat for -e", "-e")
+    assertFailMessage("parse fail near -e (#4, arg 2): expecting mode for -e", "-hex 23 -e wtf")
+    assertFailMessage("bad argument 1, in -e: Failed requirement.", "-e code fail")
   }
   @Test fun itFormats() {
     assertEquals("""
@@ -102,18 +104,18 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String, Str
   }
 }
 
-val myP = ArgParser4(
+val myP = object: ArgParser4<String,Int,Unit,Unit>(
   arg("name", "name of the user", ""),
   arg<Int>("count C", "number of the widgets", "") { it.toInt() },
   noArg, noArg,
   itemNames=listOf("ah"), itemMode=PositionalMode.MustBefore,
   autoSplit=listOf("name", "count"),
   flags=*arrayOf(arg("v", "enable verbose mode"))
-)
+) {}
 
-class ExtendArgParserTest: BaseArgParserTest<String, Int, String, String>(myP) {
+class ExtendArgParserTest: BaseArgParserTest<String, Int, Unit,Unit>(myP) {
   @Test fun readsPositional() {
-    p("hello --nameMike -v -count233").run {
+    backP("hello --nameMike -v -count233").run {
       val (e1, e2) = tup
       assertEquals("hello", items[0])
       assertEquals("Mike", e1.get())
@@ -127,7 +129,7 @@ class ExtendArgParserTest: BaseArgParserTest<String, Int, String, String>(myP) {
     assertFailMessage("parse fail near x (#3, arg 3): reading [exx, x]: should all-before options", "exx -C61 x --name wtf y")
   }
   @Test fun fourCasesForMustBefore() {
-    p("wtf") // item only
+    backP("wtf") // item only
     assertFailMessage("parse fail near -name (#1, arg 1): too less heading items (all [ah])", "-name Jessie emm")
     assertFailMessage("parse fail near -name (#1, arg 1): too less heading items (all [ah])", "-name Jake ehh -v")
   }
@@ -172,13 +174,12 @@ class ExtendArgParserTest1: BaseArgParserTest<String, Int, File, String>(yourP) 
         -mode: mode of operation in fast, small, quite
         -h -help: print this help
 
-""".trimIndent(), yourP.toString())
+    """.trimIndent(), yourP.toString())
   }
 }
 
-private val noFile = File("")
 object AWKArgParser: ArgParser4<File, String, String, String>(
-  arg<File>("file= f exec= E", "execute script file", "path", noFile) { File(it) },
+  argFile("file= f exec= E", "execute script file", "path", flags = ""),
   arg("field-separator= F", "set field separator", "fs", " \t"),
   arg("assign= v", "assign variable", "var=val", repeatable = true),
   arg("load= l", "load library", "lib", repeatable = true),
@@ -223,10 +224,10 @@ class AWKArgParserTests: BaseArgParserTest<File, String, String, String>(AWKArgP
     assertFailMessage("no executable provided", "-g")
     assertFailMessage("parse fail near -g (#2, arg 2): reading [a.awk]: should all-after options", "a.awk -g")
     assertFailMessage("parse fail near -g (#2, arg 2): reading [x.awk]: should all-after options", "x.awk -g a.awk")
-    p("a.awk")
+    backP("a.awk")
   }
   @Test fun itWorks() {
-    p("-F: print a.awk").run { assertEquals(":", tup.e2.get()) } // if f=noFile, items[0] = code.
+    backP("-F: print a.awk").run { assertEquals(":", tup.e2.get()) } // if f=noFile, items[0] = code.
   }
   @Test fun format() {
     assertEquals("""

@@ -22,7 +22,7 @@ open class ParseResult<A, B, C, D>(
 /** Order constraint for positional(no-prefix) args (comparing to prefix args) */
 enum class PositionalMode { MustBefore, MustAfter, Disordered }
 
-val noArg: Arg<String> = arg("\u0000", "") { error("noArg parsed") }
+val noArg: Arg<Unit> = arg<Unit>("\u0000", "") { error("noArg parsed") }
 val helpArg = arg("h help", "print this help") { SwitchParser.stop() }
 /** Simple parser helper for no-multi (prefixed) param and up to 4 param storage(parse with items) [moreArgs], subset of [SwitchParser] */
 open class ArgParser4<A,B,C,D>(
@@ -50,8 +50,11 @@ open class ArgParser4<A,B,C,D>(
     private var lastPosit = 0 //v all about positional args
     private val caseName = if (itemMode == PositionalMode.MustBefore) "all-before" else "all-after"
     private val isVarItem = (itemNames == listOf("..."))
-    private fun positFail(): Nothing = parseError("reading ${res.items}: should $caseName options")
-    private fun itemFail(case_name: String): Nothing = parseError("too $case_name items (all $itemNames)")
+    private fun positFail(): Nothing {
+      val (capPre, capMsg) = prefixMessageCaps()
+      parseError(capPre("reading ${res.items}: ")+capMsg("should $caseName options"))
+    }
+    private fun itemFail(case_name: String): Nothing = parseError(prefixMessageCaps().first("too $case_name items (all $itemNames)"))
     private inline val isItemLess get() = !isVarItem && res.items.size < itemNames.size
 
     override fun onItem(text: String) = res.items.plusAssign(text).also {
@@ -83,16 +86,20 @@ open class ArgParser4<A,B,C,D>(
         split?.let { return it }
         val params = p.param!!.split()
         val converter = p.convert ?: error("missing converter")
-        return params.singleOrNull()?.let { arg(it, converter)!! }
-          ?: params.joinToString("\u0000") { arg(it) }.let(converter)!!
+        val argFull = currentArg //< full name --arg
+        return params.singleOrNull()?.let { arg(it, converter)!! } //v errors looks like missing --duck's name / 's age, or bad argument in
+          ?: params.joinToString("\u0000") { currentArg = argFull ; arg(it) }.also { currentArg = "in $argFull" }.let(converter)!!
       }
       dynamicNameMap?.get(name)?.let { dynamicResult!![it.firstName] = read(it) } // dynamic args
-      val (p, sto) = nameMap[name] ?: autoSplit() ?: parseError("$name unknown")
+      val (p, sto) = nameMap[name] ?: autoSplit() ?: rescuePrefix(name).run {
+        val dynSto = (dynamicResult ?: error("add moreArgs for rescue")).getOrDefault(second, {OneOrMore<Any>()})
+        first to @Suppress("unchecked_cast") (dynSto as OM<Any>)
+      } //^ dynamic interpret for prefix
       p.param!!
       if (p.repeatable) sto.add(read(p))
       else sto.`_ value` =
         if (sto.`_ value` == null) read(p)
-        else parseError("argument $name repeated")
+        else parseError(prefixMessageCaps().first("argument $name repeated"))
     }
 
     private fun parseError(message: String): Nothing = throw ParseError(message)
@@ -128,6 +135,9 @@ open class ArgParser4<A,B,C,D>(
       if (itemMode == PositionalMode.MustAfter || itemMode == PositionalMode.Disordered) addItems()
       return argLine.toTypedArray()
     }
+
+    override fun checkPrefixForName(name: String, prefix: String) = this@ArgParser4.checkPrefixForName(name, prefix)
+    override fun prefixMessageCaps(): Pair<TextCaps, TextCaps> = this@ArgParser4.prefixMessageCaps() //<^ delegates for outer class
   }
   private var lastDriver: Driver? = null
   fun run(args: ArgArray) = Driver(args).also { lastDriver = it }.run()
@@ -175,10 +185,16 @@ open class ArgParser4<A,B,C,D>(
 
   override fun toString() = toString(epilogue = "")
   protected open fun printHelp() = println(toString())
+  protected open fun prefixMessageCaps() = TextCaps.nonePair
+  protected open fun rescuePrefix(name: String): Pair<Arg<*>, String> { throw SwitchParser.ParseError("$name unknown") }
   protected open fun checkAutoSplitForName(name: String, param: String) {}
+  protected open fun checkPrefixForName(name: String, prefix: String) {
+    val (capPre, _) = prefixMessageCaps()
+    if (prefix == "--" && name.length == 1) throw SwitchParser.ParseError(capPre("single-char shorthand should like: -$name"))
+  }
   protected open fun checkResult(result: ParseResult<A, B, C, D>) {}
 }
 
-open class ArgParser3<A,B,C>(p1: Arg<A>, p2: Arg<B>, p3: Arg<C>, vararg flags: Arg<*>): ArgParser4<A,B,C,String>(p1, p2, p3, noArg, flags=*flags)
-open class ArgParser2<A,B>(p1: Arg<A>, p2: Arg<B>, vararg flags: Arg<*>): ArgParser4<A,B,String,String>(p1, p2, noArg, noArg, flags=*flags)
-open class ArgParser1<A>(p1: Arg<A>, vararg flags: Arg<*>): ArgParser4<A,String,String,String>(p1, noArg, noArg, noArg, flags=*flags)
+open class ArgParser3<A,B,C>(p1: Arg<A>, p2: Arg<B>, p3: Arg<C>, vararg flags: Arg<*>): ArgParser4<A,B,C,Unit>(p1, p2, p3, noArg, flags=*flags)
+open class ArgParser2<A,B>(p1: Arg<A>, p2: Arg<B>, vararg flags: Arg<*>): ArgParser3<A,B,Unit>(p1, p2, noArg, flags=*flags)
+open class ArgParser1<A>(p1: Arg<A>, vararg flags: Arg<*>): ArgParser2<A,Unit>(p1, noArg, flags=*flags)
