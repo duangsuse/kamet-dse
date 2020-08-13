@@ -1,18 +1,20 @@
 package org.duangsuse.parserkt.argp
 
 typealias ArgArray = Array<out String>
+typealias Convert<R> = ((String) -> R)?
 
 inline fun <reified R> arg(
   name: String, help: String, param: String? = null,
-  default_value: R? = null, repeatable: Boolean = false, noinline convert: ((String) -> R)?): Arg<R>
+  default_value: R? = null, repeatable: Boolean = false, noinline convert: Convert<R>): Arg<R>
   = Arg(name, help, if (param == "") name.split(' ').first() else param, default_value, repeatable, convert)
 fun arg(name: String, help: String, param: String? = null,
-        default_value: String? = null, repeatable: Boolean = false, convert: ((String) -> String)? = { it })
+        default_value: String? = null, repeatable: Boolean = false, convert: Convert<String> = { it })
   = arg<String>(name, help, param, default_value, repeatable, convert)
 
 fun <R> Arg<String>.options(default_value: R? = null, vararg pairs: Pair<String, R>): Arg<R>
   = Arg(name, "$help in ${pairs.joinToString(", ") {it.first}}", param, default_value, repeatable, mapOf(*pairs)::getValue)
 fun Arg<String>.checkOptions(vararg strings: String) = options(defaultValue, *strings.map { it to it }.toTypedArray())
+fun <R> multiParam(convert: (List<String>) -> R): Convert<R> = { it.split('\u0000').let(convert) }
 
 fun defineFlags(vararg pairs: Pair<String, String>): Array<Arg<*>>
   = pairs.asIterable().map { arg("${it.first} ${it.second}", it.first.split("-").joinToString(" ")) }.toTypedArray()
@@ -51,4 +53,14 @@ internal fun Char.repeats(n: Int): String {
   val sb = StringBuilder()
   for (_t in 1..n) sb.append(this)
   return sb.toString()
+}
+
+inline fun <T> Iterable<T>.joinToBreakLines(sb: StringBuilder, separator: String, line_limit: Int, line_separator: String, crossinline transform: (T) -> CharSequence): StringBuilder {
+  var lineSize = 0
+  var lastLength = sb.length
+  return joinTo(sb, separator) {
+    val line = transform(it).also { line -> lineSize += line.length + (sb.length - lastLength) ; lastLength = sb.length  }
+    if (lineSize < line_limit) line
+    else (line_separator + line).also { lineSize = 0 }
+  }
 }

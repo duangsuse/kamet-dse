@@ -4,10 +4,10 @@ import org.duangsuse.parserkt.Tuple4
 
 // Argument patters: flag(no-arg)/action, argument:optional/repeatable
 
-/** Argument with name, help, optional param+defaultValue(repeated:initial)+convert? name is separated with " ", better put shorthands second */
+/** Argument with name, help, optional param+defaultValue(repeated:initial)+convert? name/param is separated with " ", better put shorthands second */
 data class Arg<R>(
   val name: String, val help: String, val param: String?, val defaultValue: R?,
-  val repeatable: Boolean, val convert: ((String) -> R)?) {
+  val repeatable: Boolean, val convert: Convert<R>) {
   val isFlag get() = (param == null)
   val firstName get() = name.split().first()
   val secondName get() = name.split().run { if (size < 2) first() else this[1] }
@@ -73,13 +73,19 @@ open class ArgParser4<A,B,C,D>(
         if (it == helpArg) printHelp().also { res.flags += 'h' } // suppress post chk. in [Driver.run]
         res.flags += it.convert?.invoke(name) ?: it.firstName ; return
       }
-      var split: Any? = null // flag, auto-split
+      var split: Any? = null // ^flag, v auto-split
       fun autoSplit(): Pair<Arg<*>, OM<Any>>? {
         for (sp in autoSplits) for (bang in sp.first.name.split()) // aliases
           extractArg(bang, name)?.let { checkAutoSplitForName(name, it) ; split = sp.first.convert?.invoke(it) ; return sp }
         return null
       }
-      fun read(p: Arg<*>): Any = split ?: arg(p.param!!, p.convert ?: error("missing converter"))!!
+      fun read(p: Arg<*>): Any { // support multi-param
+        split?.let { return it }
+        val params = p.param!!.split()
+        val converter = p.convert ?: error("missing converter")
+        return params.singleOrNull()?.let { arg(it, converter)!! }
+          ?: params.joinToString("\u0000") { arg(it) }.let(converter)!!
+      }
       dynamicNameMap?.get(name)?.let { dynamicResult!![it.firstName] = read(it) } // dynamic args
       val (p, sto) = nameMap[name] ?: autoSplit() ?: parseError("$name unknown")
       p.param!!
@@ -104,7 +110,15 @@ open class ArgParser4<A,B,C,D>(
       fun addItems() = result.items.forEach { argLine.add(it) } // order branched
       if (itemMode == PositionalMode.MustBefore) addItems()
       result.flags.forEach { argLine.add("$deftPrefix${it}") }
-      fun addArg(p: Arg<*>, res: Any) { argLine.add("$deftPrefix${if (use_shorthand) p.secondName else p.firstName}"); argLine.add("$res") }
+      fun addArg(p: Arg<*>, res: Any) {
+        argLine.add("$deftPrefix${if (use_shorthand) p.secondName else p.firstName}")
+        if (p.param?.split()?.size?:0 > 1)
+          when (res) { // multi-param
+            is Pair<*, *> -> res.run { argLine.add("$first"); argLine.add("$second") }
+            is Iterable<*> -> res.mapTo(argLine, Any?::toString)
+          }
+        else argLine.add("$res")
+      }
       for ((p, sto) in ps.map { it.first }.zip(result.tup.run { listOf(e1, e2, e3, e4) })) {
         fun add(res: Any) = addArg(p, res)
         sto.`_ value`?.let(::add)
@@ -125,20 +139,22 @@ open class ArgParser4<A,B,C,D>(
   fun toString(
     caps: Pair<TextCaps, TextCaps> = (TextCaps.None to TextCaps.None), row_max: Int = 70,
     head: String = "Usage: ", epilogue: String = "",
-    indent: String = "  ", colon: String = ": ", newline: String = "\n",
-    groups: Map<String, String>? = null): String {
+    indent: String = "  ", space: String = " ", colon: String = ": ", comma: String = ", ", newline: String = "\n",
+    groups: Map<String, String>? = null, transform_summary: ((String) -> String)? = {it}): String {
     val sb = StringBuilder(head)
     val pre = deftPrefix
     val (capParam, capHelp) = caps
-    if (itemMode == PositionalMode.MustBefore) sb.append(itemNames).append(' ')
-    var rowSize = 0 // summary line breaks
-    allParams.joinTo(sb, " ") {
+    fun appendItemNames() = itemNames.joinTo(sb, space) { "<$it>" }
+    if (itemMode == PositionalMode.MustBefore) appendItemNames().append(space)
+    fun appendSummary(sb: StringBuilder) = allParams.joinToBreakLines(sb, space, row_max, newline+' '.repeats(head.length)) {
       val surround: String = if (it.repeatable) "{}" else if (it.defaultValue != null) "()" else "[]"
-      var s = pre+it.joinedName() ; it.param?.run { s += " ${capParam(this)}" }
-      val pad = if (rowSize >= row_max) "$newline${' '.repeats(head.length)}".also { rowSize = 0 } else ""
-      pad + surround.let { c -> "${c[0]}$s${c[1]}" }.also { summary -> rowSize += summary.length }
+      sb.append(surround[0]).append(pre).append(it.joinedName())
+      it.param?.split()?.joinTo(sb, comma, prefix = space) { param -> capParam(param) }
+      sb.append(surround[1])
+      return@joinToBreakLines ""
     }
-    if (itemMode == PositionalMode.MustAfter) sb.append(' ').append(itemNames)
+    if (transform_summary == null) appendSummary(sb) else sb.append(appendSummary(StringBuilder()).toString().let(transform_summary))
+    if (itemMode == PositionalMode.MustAfter) { sb.append(space) ; appendItemNames() }
     sb.append(newline) // detailed desc.
     fun appendDesc(p: Arg<*>, groupIndent: String) {
       sb.append(groupIndent).append(indent).append(pre)
@@ -151,7 +167,7 @@ open class ArgParser4<A,B,C,D>(
       val grouping = allParams.groupBy { p -> groups.entries.firstOrNull { p.name in it.key.split() }?.value ?: groups["*"] ?: error("* required for default name") }
       grouping.forEach { (g, ps) -> sb.append(g).append(colon).append(newline) ; ps.forEach { appendDesc(it, indent) } }
     }
-    if (itemNames.isNotEmpty() && itemMode == PositionalMode.Disordered) sb.append("options can be mixed with items: ").append(itemNames)
+    if (itemNames.isNotEmpty() && itemMode == PositionalMode.Disordered) sb.append("options can be mixed with items: ".let(capHelp::invoke)).append(itemNames)
     return sb.append(epilogue).toString()
   }
   private inline val deftPrefix get() = prefixes.last()
