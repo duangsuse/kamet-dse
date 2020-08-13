@@ -108,7 +108,9 @@ val myP = object: ArgParser4<String,Int,Unit,Unit>(
   arg("name", "name of the user", ""),
   arg<Int>("count C", "number of the widgets", "") { it.toInt() },
   noArg, noArg,
-  moreArgs = listOf(arg("xxx", "added for rescue", "")),
+  moreArgs = listOf(
+    arg("xxx", "added for rescue", ""),
+    arg("map", "build map", "k v", repeatable = true, convert = multiParam { it[0] to it[1] })),
   itemNames=listOf("ah"), itemMode=PositionalMode.MustBefore,
   autoSplit=listOf("name", "count"),
   flags=*arrayOf(arg("v", "enable verbose mode"))
@@ -158,14 +160,20 @@ class ExtendArgParserTest: BaseArgParserTest<String, Int, Unit,Unit>(myP) {
   @Test fun dynamicInterpret() {
     p("as --add 1 -add 2 -add 3").run { assertEquals("1 2 3".split(), named!!.getAsList("add")) }
     p("ds -ax= 232 -bx=333").run { val m=named!! ; assertEquals("232", m["ax"]) ; assertEquals("333", m["bx"]) }
+    backP("mapping -map apple 苹果 -C80 -map pear 梨子 -map a b").apply {
+      assertEquals(mapOf("apple" to "苹果", "pear" to "梨子", "a" to "b"), named!!.getAsList<Pair<String,String>>("map").toMap())
+      assertEquals(80, tup.e2.get())
+      assertEquals("mapping", items[0])
+    }
   }
   @Test fun format() {
     assertEquals("""
-      Usage: <ah> [-name name] [-count -C count] [-v] [-xxx xxx]
+      Usage: <ah> [-name name] [-count -C count] [-v] [-xxx xxx] {-map k, v}
         -name: name of the user
         -count -C: number of the widgets
         -v: enable verbose mode
         -xxx: added for rescue
+        -map: build map
 
     """.trimIndent(), myP.toString())
   }

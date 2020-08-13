@@ -94,7 +94,7 @@ open class ArgParser4<A,B,C,D>(
     }
     private var autoSplitRes: Any? = null
     private fun read(p: Arg<*>): Any { // support multi-param
-      autoSplitRes?.let { return it }
+      autoSplitRes?.let { autoSplitRes = null ; return it }
       val params = p.param?.split() ?: return p.defaultValue ?: error("dynamic arg w/o param or default is invalid")
       val converter = p.convert ?: { it }
       val argFull = currentArg //< full name --arg
