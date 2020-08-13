@@ -108,10 +108,30 @@ val myP = object: ArgParser4<String,Int,Unit,Unit>(
   arg("name", "name of the user", ""),
   arg<Int>("count C", "number of the widgets", "") { it.toInt() },
   noArg, noArg,
+  moreArgs = listOf(arg("xxx", "added for rescue", "")),
   itemNames=listOf("ah"), itemMode=PositionalMode.MustBefore,
   autoSplit=listOf("name", "count"),
   flags=*arrayOf(arg("v", "enable verbose mode"))
-) {}
+) {
+  override val prefixes: List<String> = listOf("--", "/", "-")
+
+  override fun checkAutoSplitForName(name: String, param: String) {
+    if (name == "name" && param == "Jerky") throw SwitchParser.ParseError("$param doesn't like been broken into parts")
+  }
+  override fun checkPrefixForName(name: String, prefix: String) {
+    super.checkPrefixForName(name, prefix)
+    if (name.startsWith("C") && prefix == "/") throw SwitchParser.ParseError("/C is good emotion, not parameter")
+  }
+  override fun rescuePrefix(name: String): Arg<*> = when {
+    name == "add" -> arg("add", "that list", "value", repeatable = true)
+    name.endsWith("=") -> {
+      val dest = name.substring(0, name.length-1)
+      arg(dest, "woc", "value")
+    }
+    '=' in name -> arg(name.substringBefore('='), "emm", default_value = name.substringAfter('='))
+    else -> super.rescuePrefix(name)
+  }
+}
 
 class ExtendArgParserTest: BaseArgParserTest<String, Int, Unit,Unit>(myP) {
   @Test fun readsPositional() {
@@ -129,16 +149,23 @@ class ExtendArgParserTest: BaseArgParserTest<String, Int, Unit,Unit>(myP) {
     assertFailMessage("parse fail near x (#3, arg 3): reading [exx, x]: should all-before options", "exx -C61 x --name wtf y")
   }
   @Test fun fourCasesForMustBefore() {
+    assertFailMessage("parse fail near --nameJerky (#2, arg 2): Jerky doesn't like been broken into parts", "ya --nameJerky")
+    assertFailMessage("parse fail near /C19 (#7, arg 5): /C is good emotion, not parameter", "eh -name Black -v /xxx a /C19")
     backP("wtf") // item only
     assertFailMessage("parse fail near -name (#1, arg 1): too less heading items (all [ah])", "-name Jessie emm")
     assertFailMessage("parse fail near -name (#1, arg 1): too less heading items (all [ah])", "-name Jake ehh -v")
   }
+  @Test fun dynamicInterpret() {
+    p("as --add 1 -add 2 -add 3").run { assertEquals("1 2 3".split(), named!!.getAsList("add")) }
+    p("ds -ax= 232 -bx=333").run { val m=named!! ; assertEquals("232", m["ax"]) ; assertEquals("333", m["bx"]) }
+  }
   @Test fun format() {
     assertEquals("""
-      Usage: <ah> [-name name] [-count -C count] [-v]
+      Usage: <ah> [-name name] [-count -C count] [-v] [-xxx xxx]
         -name: name of the user
         -count -C: number of the widgets
         -v: enable verbose mode
+        -xxx: added for rescue
 
     """.trimIndent(), myP.toString())
   }
@@ -158,6 +185,10 @@ class ExtendArgParserTest1: BaseArgParserTest<String, Int, File, String>(yourP) 
     backP("-N mike --count 233 -I ArgParserTest.kt -I ParserTest.kt -mode fast fg hs").run {
       assertEquals(2, tup.e3.size)
       assertEquals("fast", tup.e4.get())
+    }
+    backP("-count 233 -mode quite sd bd").run {
+      assertEquals("Duckling", tup.e1.get())
+      assertEquals(listOf("sd", "bd"), items)
     }
     assertFailMessage("parse fail near -N (#2, arg 2): reading [a]: should all-after options", "a -N make")
     assertFailMessage("parse fail near -c (#4, arg 3): reading [k]: should all-after options", "-N make k -c 88 c d")
@@ -198,12 +229,12 @@ object AWKArgParser: ArgParser4<File, String, String, String>(
     "sandbox" to "S",
     "lint-old" to "t"
   ) +arrayOf(helpArg, arg("version V", "print version") { println("GNU Awk 5.0.1, API: 3.0"); SwitchParser.stop() }),
-  autoSplit = "E F v l d D L o p".split(),
+  autoSplit = "F E v d D L l o p".split(),
   itemNames = listOf("..."), itemMode = PositionalMode.MustAfter,
   moreArgs = listOf(
     arg<File>("dump-variables= d", "dump vars to file", "file") { File(it) },
     arg<File>("debug= D", "debug", "file") { File(it) },
-    arg("source= e", "execute source", "code"),
+    arg("source= e", "execute source", "code", "emm"),
     arg<File>("include= i", "include file", "file") { File(it) },
     arg("lint= L", "lint level", "").checkOptions("fatal", "invalid", "no-ext"),
     arg<File>("pretty-print= o", "pretty print to", "file") { File(it) },
@@ -212,7 +243,7 @@ object AWKArgParser: ArgParser4<File, String, String, String>(
 ) {
 
   override fun checkAutoSplitForName(name: String, param: String)
-    = if (name.length == 1 && name[0] !in "dDLop") throw SwitchParser.ParseError("auto-split used in shorthands") else Unit
+    = if (name.length == 1 && name[0] !in "vfdDlLop") throw SwitchParser.ParseError("auto-split $param used in shorthands") else Unit
 
   override fun checkResult(result: ParseResult<File, String, String, String>) {
     if (result.tup.e1.get() == noFile && result.items.isEmpty()) throw SwitchParser.ParseError("no executable provided")
@@ -227,7 +258,17 @@ class AWKArgParserTests: BaseArgParserTest<File, String, String, String>(AWKArgP
     backP("a.awk")
   }
   @Test fun itWorks() {
-    backP("-F: print a.awk").run { assertEquals(":", tup.e2.get()) } // if f=noFile, items[0] = code.
+    backP("-field-separator=: print a.awk").run {
+      assertEquals(":", tup.e2.get()) } // if f=noFile, items[0] = code.
+    p("-p233 -lint=no-ext --pretty-print=f --posix -S a.awk").run {
+      val named = this.named!!
+      assertEquals("emm", named["source="])
+      assertEquals("233", named.getAs<File>("profile=").name)
+      assertEquals("no-ext", named.getAs<String>("lint="))
+      assertEquals("PS", flags)
+    }
+    backP("-la -lb -va=2 -vb=2 -fa")
+    assertFailMessage("parse fail near -F: (#1, arg 1): auto-split : used in shorthands", "-F:")
   }
   @Test fun format() {
     assertEquals("""
@@ -236,7 +277,7 @@ class AWKArgParserTests: BaseArgParserTest<File, String, String, String>(AWKArgP
                   [-gen-pot -g] [-bignum -M] [-use-lc-numeric -N] [-non-decimal-data -n]
                   [-optimize -O] [-posix -P] [-re-interval -r] [-no-optimize -s]
                   [-sandbox -S] [-lint-old -t] [-h -help] [-version -V] [-dump-variables= -d file]
-                  [-debug= -D file] [-source= -e code] [-include= -i file] [-lint= -L lint=]
+                  [-debug= -D file] (-source= -e code) [-include= -i file] [-lint= -L lint=]
                   [-pretty-print= -o file] [-profile= -p file] <...>
             -file= -f -exec= -E: execute script file (default )
             -field-separator= -F: set field separator (default  	)
@@ -259,7 +300,7 @@ class AWKArgParserTests: BaseArgParserTest<File, String, String, String>(AWKArgP
             -version -V: print version
             -dump-variables= -d: dump vars to file
             -debug= -D: debug
-            -source= -e: execute source
+            -source= -e: execute source (default emm)
             -include= -i: include file
             -lint= -L: lint level in fatal, invalid, no-ext
             -pretty-print= -o: pretty print to

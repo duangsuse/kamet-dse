@@ -14,6 +14,7 @@ data class Arg<R>(
 }
 
 private typealias OM<E> = OneOrMore<E>
+private typealias DynOM = OM<Any>
 open class ParseResult<A, B, C, D>(
   val tup: Tuple4<OM<A>, OM<B>, OM<C>, OM<D>> = Tuple4(OM(), OM(), OM(), OM()),
   var flags: String = "", val items: MutableList<String> = mutableListOf(),
@@ -34,15 +35,15 @@ open class ArgParser4<A,B,C,D>(
   open val prefixes = listOf("--", "-")
   inner class Driver(args: ArgArray): SwitchParser<ParseResult<A, B, C, D>>(args, prefixes) {
     private val dynamicNameMap = moreArgs?.run { associateBySplit { it.name.split() } }
-    private val dynamicResult: MutableMap<String, Any>? = if (moreArgs != null) mutableMapOf() else null
+    private val dynamicResult: MutableMap<String, DynOM>? = if (moreArgs != null) mutableMapOf() else null
 
     override val res = ParseResult<A, B, C, D>(named = dynamicResult?.let(::NamedMap))
     private inline val tup get() = res.tup
     @Suppress("UNCHECKED_CAST") // dynamic type
-    private val ps = listOf(p1 to tup.e1, p2 to tup.e2, p3 to tup.e3, p4 to tup.e4).filter { it.first != noArg } as List<Pair<Arg<*>, OM<Any>>>
-    private val nameMap = ps.associateBySplit { it.first.name.split() }
-    private val flagMap = flags.asIterable().associateBySplit { it.name.split() }
-    private val autoSplits by lazy { autoSplit.mapNotNull(nameMap::get) }
+    private val ps = listOf(p1 to tup.e1, p2 to tup.e2, p3 to tup.e3, p4 to tup.e4).filter { it.first != noArg } as List<Pair<Arg<*>, DynOM>>
+    private val nameMap = ps.associateBySplit { it.first.name.split() }.toMutableMap()
+    private val flagMap = flags.asIterable().associateBySplit { it.name.split() } //v split prefix try order always defined by hand
+    private val autoSplits by lazy { autoSplit.mapNotNull { nameMap[it]?.first ?: dynamicNameMap?.get(it) } }
     init {
       ps.forEach { val p = it.first ; if (p.isFlag) error("flag ${p.firstName} should be putted in ArgParser(flag = ...)") }
     }
@@ -74,39 +75,47 @@ open class ArgParser4<A,B,C,D>(
       }
       flagMap[name]?.let {
         if (it == helpArg) printHelp().also { res.flags += 'h' } // suppress post chk. in [Driver.run]
-        res.flags += it.convert?.invoke(name) ?: it.firstName ; return
-      }
-      var split: Any? = null // ^flag, v auto-split
-      fun autoSplit(): Pair<Arg<*>, OM<Any>>? {
-        for (sp in autoSplits) for (bang in sp.first.name.split()) // aliases
-          extractArg(bang, name)?.let { checkAutoSplitForName(name, it) ; split = sp.first.convert?.invoke(it) ; return sp }
-        return null
-      }
+        res.flags += it.convert?.invoke(name) ?: it.secondName ; return
+      } //^flag  //v read, auto-split
+      var split: Any? = null
       fun read(p: Arg<*>): Any { // support multi-param
         split?.let { return it }
-        val params = p.param!!.split()
-        val converter = p.convert ?: error("missing converter")
+        val params = p.param?.split() ?: return p.defaultValue ?: error("dynamic arg w/o param or default is invalid")
+        val converter = p.convert ?: { it }
         val argFull = currentArg //< full name --arg
         return params.singleOrNull()?.let { arg(it, converter)!! } //v errors looks like missing --duck's name / 's age, or bad argument in
           ?: params.joinToString("\u0000") { currentArg = argFull ; arg(it) }.also { currentArg = "in $argFull" }.let(converter)!!
       }
-      dynamicNameMap?.get(name)?.let { dynamicResult!![it.firstName] = read(it) } // dynamic args
-      val (p, sto) = nameMap[name] ?: autoSplit() ?: rescuePrefix(name).run {
-        val dynSto = (dynamicResult ?: error("add moreArgs for rescue")).getOrDefault(second, {OneOrMore<Any>()})
-        first to @Suppress("unchecked_cast") (dynSto as OM<Any>)
-      } //^ dynamic interpret for prefix
-      p.param!!
+      //v dynamic args and split helperFn
+      dynamicNameMap?.get(name)?.let { dynamicResult!![it.firstName] = OneOrMore(read(it)) ; return }
+      fun autoSplit(): Pair<Arg<*>, DynOM>? {
+        for (sp in autoSplits) for (bang in sp.name.split()) // aliases
+          extractArg(bang, name)?.let {
+            checkAutoSplitForName(bang, it) ; split = sp.convert?.invoke(it) ?: it
+            val sto = sp.firstName.let { k -> nameMap[k]?.second ?: dynamicResult?.getOrPutOM(k) }
+            return sp to sto!!
+          }
+        return null
+      } //v null elvis chain
+      val (p, sto) = nameMap[name] ?: autoSplit() ?: rescuePrefix(name).let {
+        val key = it.firstName
+        val dynSto = (dynamicResult ?: error("add moreArgs for rescue")).getOrPutOM(key)
+        (it to dynSto).also { pair -> nameMap[key] = pair }
+      } //^ dynamic interpret for prefix (also cached)
       if (p.repeatable) sto.add(read(p))
-      else sto.`_ value` =
-        if (sto.`_ value` == null) read(p)
+      else sto.value =
+        if (sto.value == null) read(p)
         else parseError(prefixMessageCaps().first("argument $name repeated"))
     }
 
+    private fun MutableMap<String, DynOM>.getOrPutOM(key: String) = getOrPut(key) { DynOM() }
     private fun parseError(message: String): Nothing = throw ParseError(message)
     override fun run() = super.run().also {
-      for ((p, sto) in ps) {
-        if (p.defaultValue != null) if (p.repeatable) sto.add(p.defaultValue) else sto.`_ value` = sto.`_ value` ?: p.defaultValue
-      } //^ fill default values
+      ps.forEach { (p, sto) ->
+        if (p.defaultValue != null) if (p.repeatable) sto.add(p.defaultValue) else sto.value = sto.value ?: p.defaultValue
+      }
+      moreArgs?.forEach { p -> val k = p.firstName ; if (p.defaultValue != null) dynamicResult!![k] = (dynamicResult[k] ?: OM(p.defaultValue)) }
+      //^ fill default values
       if (itemMode == PositionalMode.MustAfter && 'h' !in it.flags) {
         if (isItemLess) itemFail("less")
       } //^ less item parsed?
@@ -118,6 +127,7 @@ open class ArgParser4<A,B,C,D>(
       if (itemMode == PositionalMode.MustBefore) addItems()
       result.flags.forEach { argLine.add("$deftPrefix${it}") }
       fun addArg(p: Arg<*>, res: Any) {
+        if (res == p.defaultValue) { return }
         argLine.add("$deftPrefix${if (use_shorthand) p.secondName else p.firstName}")
         if (p.param?.split()?.size?:0 > 1)
           when (res) { // multi-param
@@ -126,12 +136,18 @@ open class ArgParser4<A,B,C,D>(
           }
         else argLine.add("$res")
       }
-      for ((p, sto) in ps.map { it.first }.zip(result.tup.run { listOf(e1, e2, e3, e4) })) {
+      fun addArg(p: Arg<*>, sto: DynOM) {
         fun add(res: Any) = addArg(p, res)
-        sto.`_ value`?.let(::add)
-          ?: sto.toList().filterNotNull().forEach(::add)
+        sto.value?.let(::add)
+          ?: sto.forEach(::add)
       }
-      result.named?.`_ map`?.forEach { k, v -> addArg(dynamicNameMap?.get(k) ?: error("nonexistent arg named $k"), v) }
+      for ((p, sto) in ps.map { it.first }.zip(result.tup.run { listOf(e1, e2, e3, e4) })) {
+        @Suppress("unchecked_cast") addArg(p, sto as DynOM)
+      } //^ append for ps
+      result.named?.map?.forEach { k, v ->
+        val p = dynamicNameMap?.get(k) ?: error("nonexistent arg named $k")
+        addArg(p, v)
+      }
       if (itemMode == PositionalMode.MustAfter || itemMode == PositionalMode.Disordered) addItems()
       return argLine.toTypedArray()
     }
@@ -186,8 +202,10 @@ open class ArgParser4<A,B,C,D>(
   override fun toString() = toString(epilogue = "")
   protected open fun printHelp() = println(toString())
   protected open fun prefixMessageCaps() = TextCaps.nonePair
-  protected open fun rescuePrefix(name: String): Pair<Arg<*>, String> { throw SwitchParser.ParseError("$name unknown") }
+  /** Return-super if [name] still unknown, please note that [Arg.help] / (backRun) is never used and one of [Arg.param], [Arg.defaultValue] must be provided */
+  protected open fun rescuePrefix(name: String): Arg<*> { throw SwitchParser.ParseError("$name unknown") }
   protected open fun checkAutoSplitForName(name: String, param: String) {}
+  /** Call-super first if and args like "--c" are rejected */
   protected open fun checkPrefixForName(name: String, prefix: String) {
     val (capPre, _) = prefixMessageCaps()
     if (prefix == "--" && name.length == 1) throw SwitchParser.ParseError(capPre("single-char shorthand should like: -$name"))

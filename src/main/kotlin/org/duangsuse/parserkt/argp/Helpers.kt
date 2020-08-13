@@ -8,7 +8,7 @@ inline fun <reified R> arg(
   default_value: R? = null, repeatable: Boolean = false, noinline convert: Convert<R>): Arg<R>
   = Arg(name, help, if (param == "") name.split(' ').first() else param, default_value, repeatable, convert)
 fun arg(name: String, help: String, param: String? = null,
-        default_value: String? = null, repeatable: Boolean = false, convert: Convert<String> = { it })
+        default_value: String? = null, repeatable: Boolean = false, convert: Convert<String> = null)
   = arg<String>(name, help, param, default_value, repeatable, convert)
 
 fun <R> Arg<String>.options(default_value: R? = null, vararg pairs: Pair<String, R>): Arg<R>
@@ -19,18 +19,20 @@ fun <R> multiParam(convert: (List<String>) -> R): Convert<R> = { it.split('\u000
 fun defineFlags(vararg pairs: Pair<String, String>): Array<Arg<*>>
   = pairs.asIterable().map { arg("${it.first} ${it.second}", it.first.split("-").joinToString(" ")) }.toTypedArray()
 
-class OneOrMore<E>(internal var `_ value`: E? = null): Iterable<E> {
-  private val list: MutableList<E> by lazy(::mutableListOf)
-  val size get() = if (`_ value` != null) 1 else list.size
+class OneOrMore<E>(var value: E? = null): Iterable<E> {
+  val list: MutableList<E> by lazy(::mutableListOf)
+  val size get() = if (value != null) 1 else list.size
   fun add(item: E) { list.add(item) }
-  fun get() = `_ value` ?: error("use list[0]")
-  operator fun get(index: Int) = if (`_ value` != null) error("not list") else list[index]
-  override fun iterator(): Iterator<E> = if (`_ value` != null) listOf(`_ value`!!).iterator() else list.iterator()
-  override fun toString() = "${`_ value` ?: list}"
+  fun get() = value ?: error("use list[0]")
+  operator fun get(index: Int) = if (value != null) error("not list") else list[index]
+  override fun iterator(): Iterator<E> = if (value != null) listOf(value!!).iterator() else list.iterator()
+  override fun toString() = "${value ?: list}"
 }
 
-class NamedMap(internal val `_ map`: Map<String, Any>) {
-  inline fun <reified R> getAs(key: String) = key as R
+class NamedMap(val map: Map<String, OneOrMore<Any>>) {
+  inline fun <reified R> getAs(key: String) = map[key]?.get() as R
+  inline fun <reified R> getAsList(key: String) = @Suppress("unchecked_cast") (map[key]?.list as List<R>)
+  operator fun get(key: String) = getAs<String>(key)
 }
 
 enum class TextCaps {
