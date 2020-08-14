@@ -8,10 +8,10 @@ import org.duangsuse.parserkt.Tuple4
 data class Arg<R>(
   val name: String, val help: String, val param: String?, val defaultValue: R?,
   val repeatable: Boolean, val convert: Convert<R>) {
-  val isFlag get() = (param == null)
-  val names get() = name.split()
-  val firstName get() = names.first()
-  val secondName get() = names.run { if (size < 2) first() else this[1] }
+  inline val isFlag get() = (param == null)
+  val names = name.split()
+  val firstName = names.first()
+  val secondName = names.run { if (size < 2) first() else this[1] }
   override fun toString() =  param?.let { "[$firstName $it]" + (if (repeatable) "*" else "") } ?: firstName
 }
 
@@ -46,12 +46,14 @@ open class ArgParser4<A,B,C,D>(
   private val typedArgs = listOf(p1, p2, p3, p4)
   private val allArgs = (typedArgs + flags + (moreArgs ?: emptyList())).filter { it != noArg }
   init {
-    for (p in allArgs) if (p.isFlag && p !in flags) error("flag $p should be putted in ArgParser(flag = ...)")
-    for (p in flags) if (p.defaultValue != null) error("use convert to give default for flag $p") //< note, arg with no param is flag
+    for (p in allArgs) if (p.isFlag && p !in flags) error("flag $p should be putted in ArgParser(flags = ...)") //<v note, arg with no param is flag
+    for (p in flags) when { !p.isFlag -> error("$p in flags should not have param") ; p.defaultValue != null -> error("use convert to give default for flag $p") }
     for (p in itemArgs) if (p.run { param != null || defaultValue != null || repeatable }) error("named item $p should not repeatable or have param/default")
   }
   private var lastDriver: Driver? = null
+  /** Parse input [args], could throw [SwitchParser.ParseError] */
   fun run(args: ArgArray) = Driver(args).also { lastDriver = it }.run()
+  /** Reconstruct input back from [result], note that dynamic/converted args are not always handled */
   fun backRun(result: ParseResult<A, B, C, D>, use_shorthand: Boolean = false) = (lastDriver ?: error("run once first")).backRun(result, use_shorthand)
 
   inner class Driver(args: ArgArray): SwitchParser<ParseResult<A, B, C, D>>(args, prefixes) {
@@ -115,7 +117,7 @@ open class ArgParser4<A,B,C,D>(
     private var autoSplitRes: Any? = null
     private fun read(p: Arg<*>): Any { // support multi-param
       autoSplitRes?.let { autoSplitRes = null ; return it }
-      val params = p.param?.split() ?: return p.defaultValue ?: error("dynamic arg w/o param or default is invalid")
+      val params = p.param?.split() ?: return p.defaultValue ?: error("dynamic arg $p w/o param and default is invalid")
       val converter = p.convert ?: { it }
       val argFull = currentArg //< full name --arg
       return params.singleOrNull()?.let { arg(it, converter)!! } //v errors looks like missing --duck's name / 's age, or bad argument in

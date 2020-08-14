@@ -10,6 +10,9 @@ inline fun <reified R> arg(
 fun arg(name: String, help: String, param: String? = null,
         default_value: String? = null, repeatable: Boolean = false, convert: Convert<String> = null)
   = arg<String>(name, help, param, default_value, repeatable, convert)
+fun argInt(name: String, help: String, param: String? = "n",
+           default_value: Int? = null, repeatable: Boolean = false, base: Int = 10)
+  = arg(name, help, param, default_value, repeatable = repeatable) { it.toInt(base) }
 
 fun <R> Arg<String>.options(default_value: R? = null, vararg pairs: Pair<String, R>): Arg<R>
   = Arg(name, "$help in ${pairs.joinToString(", ") {it.first}}", param, default_value, repeatable, mapOf(*pairs)::getValue)
@@ -19,6 +22,7 @@ fun <R> multiParam(convert: (List<String>) -> R): Convert<R> = { it.split('\u000
 fun defineFlags(vararg pairs: Pair<String, String>): Array<Arg<*>>
   = pairs.asIterable().map { arg("${it.first} ${it.second}", it.first.split("-").joinToString(" ")) }.toTypedArray()
 
+/** Union type for [E] and its [List], type consistence ([value] = null)? should be cared manually. */
 class OneOrMore<E>(var value: E? = null): Iterable<E> {
   val list: MutableList<E> by lazy(::mutableListOf)
   val size get() = if (value != null) 1 else list.size
@@ -29,6 +33,7 @@ class OneOrMore<E>(var value: E? = null): Iterable<E> {
   override fun toString() = "${value ?: list}"
 }
 
+/** Dynamic typed map for [OneOrMore], use its [getAs]/[getAsList] to check&access key */
 class NamedMap(val map: Map<String, OneOrMore<Any>>) {
   inline fun <reified R> getAs(key: String) = map[key]?.get() as R
   inline fun <reified R> getAsList(key: String) = @Suppress("unchecked_cast") (map[key]?.list as List<R>)
