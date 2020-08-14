@@ -14,8 +14,11 @@ fun argInt(name: String, help: String, param: String? = "n",
            default_value: Int? = null, repeatable: Boolean = false, base: Int = 10)
   = arg(name, help, param, default_value, repeatable = repeatable) { it.toInt(base) }
 
-fun <R> Arg<String>.options(default_value: R? = null, vararg pairs: Pair<String, R>): Arg<R>
-  = Arg(name, "$help in ${pairs.joinToString(", ") {it.first}}", param, default_value, repeatable, mapOf(*pairs)::getValue)
+fun <R> Arg<String>.options(default_value: R?, map: Map<String, R>): Arg<R>
+  = Arg(name, "$help in ${map.entries.joinToString(", ") {it.key}}", param, default_value, repeatable, map::getValue)
+inline fun <reified R: Enum<R>> Arg<String>.options(default_value: R?): Arg<R> = options(default_value, enumValues<R>().associateBy { it.name.toLowerCase() })
+fun <R> Arg<String>.options(default_value: R?, vararg pairs: Pair<String, R>): Arg<R> = options(default_value, mapOf(*pairs))
+
 fun Arg<String>.checkOptions(vararg strings: String) = options(defaultValue, *strings.map { it to it }.toTypedArray())
 fun <R> multiParam(convert: (List<String>) -> R): Convert<R> = { it.split('\u0000').let(convert) }
 
@@ -59,7 +62,7 @@ internal fun <T> Iterable<T>.associateByAll(keySelector: (T) -> Iterable<String>
   return map
 }
 internal fun String.split() = split(' ')
-internal fun Char.repeats(n: Int): String {
+fun Char.repeats(n: Int): String {
   val sb = StringBuilder()
   for (_t in 1..n) sb.append(this)
   return sb.toString()
@@ -68,6 +71,7 @@ internal fun Char.repeats(n: Int): String {
 fun String.splitArgv() = split(" ").toTypedArray()
 fun String.takeUnlessEmpty() = takeUnless { it.isEmpty() }
 fun String.takeNotEmptyOr(value: String) = takeUnlessEmpty() ?: value
+fun String?.showIfPresent(transform: (String) -> String) = this?.let(transform) ?: ""
 
 inline fun <T> Iterable<T>.joinToBreakLines(sb: StringBuilder, separator: String, line_limit: Int, line_separator: String, crossinline transform: (T) -> CharSequence): StringBuilder {
   var lineSize = 0
@@ -76,5 +80,8 @@ inline fun <T> Iterable<T>.joinToBreakLines(sb: StringBuilder, separator: String
     val line = transform(it).also { line -> lineSize += line.length + (sb.length - lastLength) ; lastLength = sb.length  }
     if (lineSize < line_limit) line
     else (line_separator + line).also { lineSize = 0 }
-  }
+  }.also { if (lineSize == 0) sb.deleteLast(line_separator.length+1) }
+}
+fun java.lang.StringBuilder.deleteLast(n: Int) {
+  delete(length - (n-1), length)
 }

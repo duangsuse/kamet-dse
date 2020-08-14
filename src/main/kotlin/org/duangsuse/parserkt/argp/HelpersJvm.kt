@@ -3,7 +3,7 @@ package org.duangsuse.parserkt.argp
 import java.io.File
 
 val noFile = File("")
-/** [flags]: mode "rw"/"d" (dir), create "+" */
+/** Value [noFile] is provided by default. [flags]: mode "rw"/"d" (dir), create "+" */
 fun argFile(name: String, help: String, param: String? = "path", default_value: File? = noFile, repeatable: Boolean = false, flags: String = "r")
   = arg(name, help, param, default_value, repeatable) {
   val file = File(it)

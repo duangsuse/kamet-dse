@@ -106,6 +106,41 @@ class TheArgParserVersions {
     assertEquals(listOf("abc", "def"), res1.named!!.getAsList("flags"))
     assertEquals("foo bar baz".split(" "), res1.items)
   }
+  @Test fun kotlinXCli() {
+    assertEquals("""
+      Usage: example (-format -f fmt_output) (-eps sec) [-debug -d] [-h -help] {-sf fmt_output}
+        -format -f -> Format for output file in html, csv, pdf (default CSV)
+        -eps -> Observational error (default 0.01)
+        -debug -d -> Turn on debug mode
+        -h -help -> print this help
+        -sf -> Format as string for output file in html, csv, pdf (default csv)
+      options can be mixed with items: <input> <output>
+    """.trimIndent(), KotlinXCliExample.toString())
+    val res = KotlinXCliExample.run("a.csv b.pdf -d --eps 0.1")
+    res.run { val named = named!!
+      assertEquals("a.csv", named.getAs<File>("input").name)
+      assertEquals("b.pdf", named.getAs<File>("output").name)
+      assertEquals("d", flags)
+      assertEquals(0.1, tup.e2.get())
+    }
+  }
+}
+
+// https://github.com/Kotlin/kotlinx-cli#example
+object KotlinXCliExample: ArgParser2<KotlinXCliExample.Format, Double>(
+  arg("format f", "Format for output file", "fmt_output").options(Format.CSV),
+  arg("eps", "Observational error", "sec", 0.01) { it.toDouble() },
+  arg("debug d", "Turn on debug mode"), helpArg,
+  items = listOf(
+    argFileDI("input", "Input file"),
+    argFileDI("output", "Output file name")),
+  more = listOf(
+    arg("sf", "Format as string for output file", "fmt_output", "csv", repeatable = true).checkOptions("html", "csv", "pdf")
+  )
+) {
+  enum class Format { HTML, CSV, PDF }
+  override fun toString() = toString(prog = "example", colon = " -> ")
 }
 
 internal fun <A,B,C,D> ArgParser4<A,B,C,D>.run(text: String) = run(text.splitArgv())
+internal fun argFileDI(name: String, help: String) = argFileD(name, help, param = null, default_value = null)

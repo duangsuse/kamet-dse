@@ -34,21 +34,26 @@ private val eAL: AL = emptyList()
 val noArg: Arg<Unit> = arg<Unit>("\u0000", "") { error("noArg parsed") }
 val helpArg = arg("h help", "print this help") { SwitchParser.stop() }
 /** Simple parser helper for no-multi (prefixed) param and up to 4 param storage(parse with items) [moreArgs],
- *  subset of [SwitchParser]; add [Arg.convert] to [itemArgs] to store arg into [ParseResult.named] */
+ *  subset of [SwitchParser]; add [Arg.convert] to [itemArgs] to store arg into [ParseResult.named].
+ *  Arg order: `(param) (flags) (items) (more)` and [autoSplit]/[itemMode] */
 open class ArgParser4<A,B,C,D>(
   val p1: Arg<A>, val p2: Arg<B>,
   val p3: Arg<C>, val p4: Arg<D>,
-  val itemArgs: AL = eAL, val itemMode: PositionalMode = PositionalMode.Disordered,
-  val autoSplit: List<String> = emptyList(), vararg val flags: Arg<*>,
-  val moreArgs: AL? = null) {
-  open val prefixes = listOf("--", "-")
+  vararg val flags: Arg<*>, val itemArgs: AL = eAL, val moreArgs: AL? = null,
+  val autoSplit: List<String> = emptyList(),
+  val itemMode: PositionalMode = PositionalMode.Disordered) {
+  protected open val prefixes = listOf("--", "-")
+  protected open val deftPrefix = "-"
 
   private val typedArgs = listOf(p1, p2, p3, p4)
   private val allArgs = (typedArgs + flags + (moreArgs ?: emptyList())).filter { it != noArg }
   init {
-    for (p in allArgs) if (p.isFlag && p !in flags) error("flag $p should be putted in ArgParser(flags = ...)") //<v note, arg with no param is flag
+    for (p in allArgs) if (p.isFlag && p !in flags) error("flag $p should be putted in ArgParser(flags = ...)")
     for (p in flags) when { !p.isFlag -> error("$p in flags should not have param") ; p.defaultValue != null -> error("use convert to give default for flag $p") }
-    for (p in itemArgs) if (p.run { param != null || defaultValue != null || repeatable }) error("named item $p should not repeatable or have param/default")
+    for (p in itemArgs) when {
+      p.defaultValue != null || p.repeatable -> error("named item $p should not repeatable or have default")
+      (' ' in p.name) -> error("item arg $p should not have aliases") //^ note, arg with no param is flag
+    }
   }
   private var lastDriver: Driver? = null
   /** Parse input [args], could throw [SwitchParser.ParseError] */
@@ -96,7 +101,7 @@ open class ArgParser4<A,B,C,D>(
         isVarItem -> itemArgs.last()
         else -> itemFail("many")
       }
-      arg.run { currentArg += " ($firstName)"
+      arg.run { currentArg += " (" + param.showIfPresent {"$it of "} + "$firstName)"
         convert?.invoke(text)?.let { ensureDynamicResult().getOrPutOM(name).addResult(this, it, firstName) }
       } ?: addItem()
       lastPosit++
@@ -199,10 +204,10 @@ open class ArgParser4<A,B,C,D>(
   /** [caps]: (param to help) ; [row_max]: in summary, max line len ; [groups]: "*" to "Options", "a b c" to "SomeGroup" */
   fun toString(
     caps: Pair<TextCaps, TextCaps> = (TextCaps.None to TextCaps.None), row_max: Int = 70,
-    head: String = "Usage: ", epilogue: String = "",
+    prog: String = "", head: String = "Usage: ", epilogue: String = "",
     indent: String = "  ", space: String = " ", colon: String = ": ", comma: String = ", ", newline: String = "\n",
     groups: Map<String, String>? = null, transform_summary: ((String) -> String)? = {it}): String {
-    val sb = StringBuilder(head)
+    val sb = StringBuilder(head) ; prog.takeUnlessEmpty()?.let { sb.append(it).append(space) }
     val pre = deftPrefix
     val (capParam, capHelp) = caps
     fun appendItemNames() = itemArgs.joinTo(sb, space) { "<${it.firstName}>" }
@@ -232,7 +237,6 @@ open class ArgParser4<A,B,C,D>(
     if (itemMode == PositionalMode.Disordered && itemArgs.isNotEmpty()) { sb.append("options can be mixed with items: ".let(capHelp::invoke)); appendItemNames() }
     return sb.append(epilogue).toString()
   }
-  private inline val deftPrefix get() = prefixes.last()
   private fun Arg<*>.joinedName() = name.split().joinToString(" $deftPrefix")
 
   override fun toString() = toString(epilogue = "")
@@ -249,6 +253,6 @@ open class ArgParser4<A,B,C,D>(
   protected open fun checkResult(result: ParseResult<A, B, C, D>) {}
 }
 
-open class ArgParser3<A,B,C>(p1: Arg<A>, p2: Arg<B>, p3: Arg<C>, vararg flags: Arg<*>, items: AL=eAL): ArgParser4<A,B,C,Unit>(p1, p2, p3, noArg, flags=*flags, itemArgs=items)
-open class ArgParser2<A,B>(p1: Arg<A>, p2: Arg<B>, vararg flags: Arg<*>, items: AL=eAL): ArgParser3<A,B,Unit>(p1, p2, noArg, flags=*flags, items=items)
-open class ArgParser1<A>(p1: Arg<A>, vararg flags: Arg<*>, items: AL=eAL): ArgParser2<A,Unit>(p1, noArg, flags=*flags, items=items)
+open class ArgParser3<A,B,C>(p1: Arg<A>, p2: Arg<B>, p3: Arg<C>, vararg flags: Arg<*>, items: AL=eAL, more: AL=eAL): ArgParser4<A,B,C,Unit>(p1, p2, p3, noArg, *flags, itemArgs=items, moreArgs=more)
+open class ArgParser2<A,B>(p1: Arg<A>, p2: Arg<B>, vararg flags: Arg<*>, items: AL=eAL, more: AL=eAL): ArgParser3<A,B,Unit>(p1, p2, noArg, *flags, items=items, more=more)
+open class ArgParser1<A>(p1: Arg<A>, vararg flags: Arg<*>, items: AL=eAL, more: AL=eAL): ArgParser2<A,Unit>(p1, noArg, *flags, items=items, more=more)

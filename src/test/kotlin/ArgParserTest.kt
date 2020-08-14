@@ -94,7 +94,7 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String,Unit
     """.trimIndent(), luaP.toString(groups = mapOf("l e hex" to "Options", "i E" to "Flags", "*" to "Help")))
   }
   @Test fun unorderedFormats() {
-    val pas = ArgParser4(arg("donkey", "donkey you rides", "name"), noArg, noArg, noArg, listOf(arg("papa",""), arg("mama","")))
+    val pas = ArgParser4(arg("donkey", "donkey you rides", "name"), noArg, noArg, noArg, itemArgs = listOf(arg("papa",""), arg("mama","")))
     assertEquals("""
       Usage: [-donkey name]
         -donkey: donkey you rides
@@ -218,7 +218,7 @@ class ExtendArgParserTest1: BaseArgParserTest<String, Int, File, String>(yourP) 
   }
 }
 
-fun argFileD(name: String, help: String, param: String = "path", default_value: File? = noFile, repeatable: Boolean = false)
+fun argFileD(name: String, help: String, param: String? = "path", default_value: File? = noFile, repeatable: Boolean = false)
   = argFile(name, help, param, default_value, repeatable, "")
 
 object AWKArgParser: ArgParser4<File, String, String, String>(
