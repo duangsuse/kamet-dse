@@ -4,7 +4,7 @@ import java.io.File
 
 val noFile = File("")
 /** [flags]: mode "rw"/"d" (dir), create "+" */
-fun argFile(name: String, help: String, param: String = "path", default_value: File = noFile, repeatable: Boolean = false, flags: String = "r")
+fun argFile(name: String, help: String, param: String? = "path", default_value: File? = noFile, repeatable: Boolean = false, flags: String = "r")
   = arg(name, help, param, default_value, repeatable) {
   val file = File(it)
   fun require(mode: String, predicate: (File) -> Boolean) = require(predicate(file)) {"file \"$file\" cannot be opened $mode"}

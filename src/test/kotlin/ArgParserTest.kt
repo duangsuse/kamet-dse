@@ -111,7 +111,7 @@ val myP = object: ArgParser4<String,Int,Unit,Unit>(
   moreArgs = listOf(
     arg("xxx", "added for rescue", "", ""),
     arg("map", "build map", "k v", repeatable = true, convert = multiParam { it[0] to it[1] })),
-  itemArgs=listOf(arg("ah", "ah ha")), itemMode=PositionalMode.MustBefore,
+  itemArgs=listOf(arg("ah", "ah ha"), argFile("em", "emm", null, null, flags="")), itemMode=PositionalMode.MustBefore,
   autoSplit=listOf("name", "count"),
   flags=*arrayOf(arg("v", "enable verbose mode"))
 ) {
@@ -137,30 +137,31 @@ val myP = object: ArgParser4<String,Int,Unit,Unit>(
 
 class ExtendArgParserTest: BaseArgParserTest<String, Int, Unit,Unit>(myP) {
   @Test fun readsPositional() {
-    backP("hello --nameMike -v -count233").run {
+    backP("hello emf --nameMike -v -count233").run {
       val (e1, e2) = tup
       assertEquals("hello", items[0])
+      assertEquals("emf", named!!.getAs<File>("em").name)
       assertEquals("Mike", e1.get())
       assertEquals(233, e2.get())
       assertTrue('v' in flags)
     }
-    backP("emm -C80").run { assertEquals(80, tup.e2.get()) }
-    assertFailMessage("parse fail near -xx (#1, arg 1): too less heading items (all [ah])", "-xx")
-    assertFailMessage("parse fail near s (#2, arg 2): too many items (all [ah])", "a s -nameJack")
-    assertFailMessage("parse fail near loo (#4, arg 4): reading [hel, loo]: should all-before options", "hel -count666 -v loo")
-    assertFailMessage("parse fail near x (#3, arg 3): reading [exx, x]: should all-before options", "exx -C61 x --name wtf y")
+    backP("emm a -C80").run { assertEquals(80, tup.e2.get()) }
+    assertFailMessage("parse fail near -xx (#1, arg 1): too less heading items (all [ah, em])", "-xx")
+    assertFailMessage("parse fail near x (#3, arg 3): too many items (all [ah, em])", "a s x -nameJack")
+    assertFailMessage("parse fail near loo (#5, arg 5): reading [hel, loo]: should all-before options", "hel xx -count666 -v loo")
+    assertFailMessage("parse fail near x (#4, arg 4): reading [exx, x]: should all-before options", "exx xx -C61 x --name wtf y")
   }
   @Test fun fourCasesForMustBefore() {
-    assertFailMessage("parse fail near --nameJerky (#2, arg 2): Jerky doesn't like been broken into parts", "ya --nameJerky")
-    assertFailMessage("parse fail near /C19 (#7, arg 5): /C is good emotion, not parameter", "eh -name Black -v /xxx a /C19")
+    assertFailMessage("parse fail near --nameJerky (#3, arg 3): Jerky doesn't like been broken into parts", "ya ka --nameJerky")
+    assertFailMessage("parse fail near /C19 (#8, arg 6): /C is good emotion, not parameter", "eh ss -name Black -v /xxx a /C19")
     backP("wtf") // item only
-    assertFailMessage("parse fail near -name (#1, arg 1): too less heading items (all [ah])", "-name Jessie emm")
-    assertFailMessage("parse fail near -name (#1, arg 1): too less heading items (all [ah])", "-name Jake ehh -v")
+    assertFailMessage("parse fail near -name (#1, arg 1): too less heading items (all [ah, em])", "-name Jessie emm")
+    assertFailMessage("parse fail near -name (#1, arg 1): too less heading items (all [ah, em])", "-name Jake ehh -v")
   }
   @Test fun dynamicInterpret() {
-    p("as --add 1 -add 2 -add 3").run { assertEquals("1 2 3".split(), named!!.getAsList("add")) }
-    p("ds -ax= 232 -bx=333").run { val m=named!! ; assertEquals("232", m["ax"]) ; assertEquals("333", m["bx"]) }
-    backP("mapping -map apple 苹果 -C80 -map pear 梨子 -map a b").apply {
+    p("as aa --add 1 -add 2 -add 3").run { assertEquals("1 2 3".split(), named!!.getAsList("add")) }
+    p("ds aa -ax= 232 -bx=333").run { val m=named!! ; assertEquals("232", m["ax"]) ; assertEquals("333", m["bx"]) }
+    backP("mapping xs -map apple 苹果 -C80 -map pear 梨子 -map a b").apply {
       assertEquals(mapOf("apple" to "苹果", "pear" to "梨子", "a" to "b"), named!!.getAsList<Pair<String,String>>("map").toMap())
       assertEquals(80, tup.e2.get())
       assertEquals("mapping", items[0])
@@ -168,7 +169,7 @@ class ExtendArgParserTest: BaseArgParserTest<String, Int, Unit,Unit>(myP) {
   }
   @Test fun format() {
     assertEquals("""
-      Usage: <ah> (-name name) (-count -C count) [-v] (-xxx xxx) {-map k, v}
+      Usage: <ah> <em> (-name name) (-count -C count) [-v] (-xxx xxx) {-map k, v}
         -name: name of the user (default Alice)
         -count -C: number of the widgets (default 1)
         -v: enable verbose mode
@@ -217,7 +218,7 @@ class ExtendArgParserTest1: BaseArgParserTest<String, Int, File, String>(yourP) 
   }
 }
 
-fun argFileD(name: String, help: String, param: String = "path", default_value: File = noFile, repeatable: Boolean = false)
+fun argFileD(name: String, help: String, param: String = "path", default_value: File? = noFile, repeatable: Boolean = false)
   = argFile(name, help, param, default_value, repeatable, "")
 
 object AWKArgParser: ArgParser4<File, String, String, String>(
@@ -241,7 +242,7 @@ object AWKArgParser: ArgParser4<File, String, String, String>(
     "lint-old" to "t"
   ) +arrayOf(helpArg, arg("version V", "print version") { println("GNU Awk 5.0.1, API: 3.0"); SwitchParser.stop() }),
   autoSplit = "F E v d D L l o p".split(),
-  itemArgs = listOf(arg("...","")), itemMode = PositionalMode.MustAfter,
+  itemArgs = listOf(arg("0", "") {it}, arg("...","")), itemMode = PositionalMode.MustAfter,
   moreArgs = listOf(
     argFileD("dump-variables= d", "dump vars to file", "file"),
     argFileD("debug= D", "debug", "file"),
@@ -264,15 +265,17 @@ object AWKArgParser: ArgParser4<File, String, String, String>(
 class AWKArgParserTests: BaseArgParserTest<File, String, String, String>(AWKArgParser) {
   @Test fun fourCaseForMustAfter() {
     assertFailMessage("no executable provided", "-g")
-    assertFailMessage("parse fail near -g (#2, arg 2): reading [a.awk]: should all-after options", "a.awk -g")
-    assertFailMessage("parse fail near -g (#2, arg 2): reading [x.awk]: should all-after options", "x.awk -g a.awk")
-    backP("a.awk")
+    assertFailMessage("parse fail near -g (#3, arg 3): reading [a.awk]: should all-after options", "z a.awk -g")
+    assertFailMessage("parse fail near -g (#3, arg 3): reading [x.awk]: should all-after options", "z x.awk -g a.awk")
+    backP("z a.awk")
   }
   @Test fun itWorks() {
     backP("-field-separator=: print a.awk").run {
       assertEquals(":", tup.e2.get()) } // if f=noFile, items[0] = code.
-    p("-p233 -lint=no-ext --pretty-print=f --posix -S a.awk").run {
+    p("-p233 -lint=no-ext --pretty-print=f --posix -S a.awk hah.awk mam.awk").run {
       val named = this.named!!
+      assertEquals("a.awk", named["0"])
+      assertEquals(listOf("hah.awk", "mam.awk"), items)
       assertEquals("emm", named["source="])
       assertEquals("233", named.getAs<File>("profile=").name)
       assertEquals("no-ext", named.getAs<String>("lint="))
@@ -289,7 +292,7 @@ class AWKArgParserTests: BaseArgParserTest<File, String, String, String>(AWKArgP
             [-optimize -O] [-posix -P] [-re-interval -r] [-no-optimize -s]
             [-sandbox -S] [-lint-old -t] [-h -help] [-version -V] (-dump-variables= -d file)
             (-debug= -D file) (-source= -e code) (-include= -i file) (-lint= -L lint=)
-            (-pretty-print= -o file) (-profile= -p file) <...>
+            (-pretty-print= -o file) (-profile= -p file) <0> <...>
       -file= -f -exec= -E: execute script file (default none)
       -field-separator= -F: set field separator (default  	)
       -assign= -v: assign variable

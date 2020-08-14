@@ -33,7 +33,8 @@ private val eAL: AL = emptyList()
 
 val noArg: Arg<Unit> = arg<Unit>("\u0000", "") { error("noArg parsed") }
 val helpArg = arg("h help", "print this help") { SwitchParser.stop() }
-/** Simple parser helper for no-multi (prefixed) param and up to 4 param storage(parse with items) [moreArgs], subset of [SwitchParser] */
+/** Simple parser helper for no-multi (prefixed) param and up to 4 param storage(parse with items) [moreArgs],
+ *  subset of [SwitchParser]; add [Arg.convert] to [itemArgs] to store arg into [ParseResult.named] */
 open class ArgParser4<A,B,C,D>(
   val p1: Arg<A>, val p2: Arg<B>,
   val p3: Arg<C>, val p4: Arg<D>,
@@ -45,8 +46,9 @@ open class ArgParser4<A,B,C,D>(
   private val typedArgs = listOf(p1, p2, p3, p4)
   private val allArgs = (typedArgs + flags + (moreArgs ?: emptyList())).filter { it != noArg }
   init {
-    for (p in typedArgs) if (p != noArg && p.isFlag) error("flag $p should be putted in ArgParser(flag = ...)")
-    for (p in itemArgs) if (p.run { param != null || defaultValue != null || repeatable }) error("named item $p should not repeatable/have defaultValue")
+    for (p in allArgs) if (p.isFlag && p !in flags) error("flag $p should be putted in ArgParser(flag = ...)")
+    for (p in flags) if (p.defaultValue != null) error("use convert to give default for flag $p") //< note, arg with no param is flag
+    for (p in itemArgs) if (p.run { param != null || defaultValue != null || repeatable }) error("named item $p should not repeatable or have param/default")
   }
   private var lastDriver: Driver? = null
   fun run(args: ArgArray) = Driver(args).also { lastDriver = it }.run()
@@ -70,26 +72,29 @@ open class ArgParser4<A,B,C,D>(
     private val autoSplits by lazy { autoSplit.mapNotNull { nameMap[it]?.first ?: dynamicNameMap?.get(it) } }
 
     private var lastPosit = 0 //v all about positional args
-    private val caseName = if (itemMode == PositionalMode.MustBefore) "all-before" else "all-after"
-    private val isVarItem = itemArgs.size == 1 && itemArgs[0].name == "..."
     private val itemArgZ = itemArgs.iterator()
+    private val caseName = if (itemMode == PositionalMode.MustBefore) "all-before" else "all-after"
+    private val isVarItem = itemArgs.lastOrNull()?.name == "..."
+    private inline val isItemLess get() = !isVarItem && itemArgZ.hasNext()
     private fun positFail(): Nothing {
       val (capPre, capMsg) = prefixMessageCaps()
       throw ParseError(capPre("reading ${res.items}: ")+capMsg("should $caseName options"))
     }
     private fun itemFail(case_name: String): Nothing = parseError("too $case_name items (all $itemArgs)")
     private fun argDuplicateError(name: String): Nothing = parseError("argument $name repeated")
-    private inline val isItemLess get() = !isVarItem && itemArgZ.hasNext()
 
     override fun onItem(text: String) {
       fun addItem() = res.items.plusAssign(text)
       if (itemMode != PositionalMode.Disordered && pos != lastPosit+1) { // check continuous (ClosedRange)
-        if (itemMode == PositionalMode.MustAfter && lastPosit == 0) lastPosit = pos-1 // one chance, late-initial posit. -1 to keep in ++ later
+        if (itemMode == PositionalMode.MustAfter && lastPosit == 0) lastPosit = pos-1 // one chance, late-initial posit. n-1 to keep in ++ later
         else { addItem() ; positFail() } // zero initiated posit, fail.
       }
-      if (!isVarItem && !itemArgZ.hasNext()) itemFail("many")
-      val arg = if (isVarItem) itemArgs[0] else itemArgZ.next()
-      arg.run {
+      val arg = when {
+        itemArgZ.hasNext() -> itemArgZ.next()
+        isVarItem -> itemArgs.last()
+        else -> itemFail("many")
+      }
+      arg.run { currentArg += " ($firstName)"
         convert?.invoke(text)?.let { ensureDynamicResult().getOrPutOM(name).addResult(this, it, firstName) }
       } ?: addItem()
       lastPosit++
@@ -122,9 +127,9 @@ open class ArgParser4<A,B,C,D>(
       fun autoSplit(): Pair<Arg<*>, DynOM>? {
         for (sp in autoSplits) for (prefix in sp.names) extractArg(prefix, name)?.let {
           checkAutoSplitForName(prefix, it) ; autoSplitRes = sp.convert?.invoke(it) ?: it
-          val sto = sp.firstName.let { k -> nameMap[k]?.second ?: dynamicResult?.getOrPutOM(k) }
-          return sp to sto!!
-        } //^ support arg name aliases % dynRes
+          val sto = sp.firstName.let { k -> nameMap[k]?.second ?: dynamicResult!!.getOrPutOM(k) }
+          return sp to sto
+        } //^ support arg name aliases & dynRes
         return null
       } //^ prefix ordered scan & dynRes  //v null elvis chain
       val (p, sto) = nameMap[name] ?: autoSplit() ?: dynamicInterpret(name)
@@ -154,7 +159,11 @@ open class ArgParser4<A,B,C,D>(
     }
     fun backRun(result: ParseResult<A, B, C, D>, use_shorthand: Boolean): ArgArray {
       val argLine: MutableList<String> = mutableListOf()
-      fun addItems() = result.items.forEach { argLine.add(it) } // order branched
+      val itemArgNames = itemArgs.mapTo(mutableSetOf()) { it.name }
+      fun addItems() {
+        result.items.forEach { argLine.add(it) }
+        result.named?.map?.forEach { (k, v) -> if (k in itemArgNames) argLine.add("${v.get()}") }
+      } // order branched
       fun addArg(p: Arg<*>, res: Any) {
         if (res == p.defaultValue) { return }
         argLine.add("$deftPrefix${if (use_shorthand) p.secondName else p.firstName}")
@@ -172,7 +181,8 @@ open class ArgParser4<A,B,C,D>(
       for ((p, sto) in ps.map { it.first }.zip(result.tup.run { listOf(e1, e2, e3, e4) })) {
         @Suppress("unchecked_cast") addArg(p, sto as DynOM)
       } //^ append for ps
-      result.named?.map?.forEach { k, v ->
+      result.named?.map?.forEach { (k, v) ->
+        if (k in itemArgNames) return@forEach
         val p = dynamicNameMap?.get(k) ?: error("nonexistent arg named $k")
         addArg(p, v)
       } //^ and for dynRes
