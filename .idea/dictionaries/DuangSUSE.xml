@@ -1,6 +1,7 @@
 <component name="ProjectDictionaryState">
   <dictionary name="DuangSUSE">
     <words>
+      <w>argp</w>
       <w>codegen</w>
       <w>conv</w>
       <w>deref</w>
@@ -12,6 +13,7 @@
       <w>prec</w>
       <w>reassociate</w>
       <w>redeclared</w>
+      <w>subcmd</w>
       <w>subexpr</w>
     </words>
   </dictionary>

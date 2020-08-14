@@ -124,6 +124,37 @@ class TheArgParserVersions {
       assertEquals(0.1, tup.e2.get())
     }
   }
+  @Test fun kotlinXCliSubcmd() {
+    val p = KotlinXCliSubcmdExample
+    assertEquals("""
+      Usage: [-output -o path]
+      Subcommands: 
+        summary: Calculate summary
+        [-invert -i] {-addendums n}
+        Options: 
+          -invert -i: Invert results
+          -addendums: Addendums
+        mul: Multiply
+        {-addendums n}
+        Subcommands: 
+          justice: Just an ice
+          [-n n]
+          Options: 
+            -n: number
+        Options: 
+          -addendums: Addendums
+      Options: 
+        -output -o: Output file
+
+    """.trimIndent(), p.toString(groups = mapOf("*" to "Options", "(subcmd)" to "Subcommands"), indent = " "))
+    val res = p.run("-o hello summary -i -addendums 12 -addendums 3")
+    assertEquals("hello", res.tup.e1.get())
+    assertEquals(-15, res.named!!.getAs("addendums"))
+    assertFails { p.run("justice") }
+    assertFails { p.run("mul") }
+    val res1 = p.run("-o outs mul -addendums 25 -addendums 4")
+    assertEquals(100, res1.named!!.getAs("addendums"))
+  }
 }
 
 // https://github.com/Kotlin/kotlinx-cli#example
@@ -140,6 +171,30 @@ object KotlinXCliExample: ArgParser2<KotlinXCliExample.Format, Double>(
 ) {
   enum class Format { HTML, CSV, PDF }
   override fun toString() = toString(prog = "example", colon = " -> ")
+}
+
+object KotlinXCliSubcmdExample: ArgParser1<String>(
+  arg("output o", "Output file", "path")
+) {
+  override fun toString() = toString(prog = "example")
+  private val addNumbers = argInt("addendums", "Addendums", "n", repeatable = true)
+  object Summary: ArgParser1<Int>(
+    addNumbers,
+    arg("invert i", "Invert results")
+  ) {
+    override fun checkResult(result: ParseResult<Int, Unit, Unit, Unit>) {
+      val acc = result.tup.e1
+      acc.value = acc.sum().let { if ('i' in result.flags) -it else it }
+    }
+  }
+  object Multiply: ArgParser1<Int>(addNumbers) {
+    override fun checkResult(result: ParseResult<Int, Unit, Unit, Unit>) {
+      val acc = result.tup.e1
+      acc.value = acc.fold(1) { n, d -> n*d }
+    }
+    init { addSub("justice", "Just an ice", ArgParser1(argInt("n", "number"))) }
+  }
+  init { addSub("summary", "Calculate summary", Summary) ; addSub("mul", "Multiply", Multiply) }
 }
 
 internal fun <A,B,C,D> ArgParser4<A,B,C,D>.run(text: String) = run(text.splitArgv())
