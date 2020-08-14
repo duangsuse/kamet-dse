@@ -45,7 +45,7 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String,Unit
   @Test fun itFails() {
     assertFailMessage("parse fail near --E (#3, arg 2): single-char shorthand should like: -E", "--hex af --E")
     assertFailMessage("bad argument 1, --hex's n: For input string: \".23\"", "--hex .23")
-    assertFailMessage("parse fail near -e (#5, arg 3): argument e repeated", "-e wtf mode x -e twice")
+    assertFailMessage("parse fail near in -e (#6, arg 2): argument e repeated", "-e wtf mode -e twice x item")
     assertEquals("flag wtf should be putted in ArgParser(flag = ...)",
       assertFailsWith<IllegalStateException> { ArgParser1(arg("wtf", "e mmm", param = null)).run("".splitArgv()) }.message)
     assertFailMessage("parse fail near -e (#1, arg 1): expecting stat for -e", "-e")
@@ -94,11 +94,11 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String,Unit
     """.trimIndent(), luaP.toString(groups = mapOf("l e hex" to "Options", "i E" to "Flags", "*" to "Help")))
   }
   @Test fun unorderedFormats() {
-    val pas = ArgParser4(arg("donkey", "donkey you rides", "name"), noArg, noArg, noArg, listOf("papa", "mama"))
+    val pas = ArgParser4(arg("donkey", "donkey you rides", "name"), noArg, noArg, noArg, listOf(arg("papa",""), arg("mama","")))
     assertEquals("""
       Usage: [-donkey name]
         -donkey: donkey you rides
-      options can be mixed with items: [papa, mama]
+      options can be mixed with items: <papa> <mama>
     """.trimIndent(), pas.toString())
     assertEquals(listOf("A", "B"), pas.run(arrayOf("A", "-donkey", "ED2K", "B")).items)
   }
@@ -111,7 +111,7 @@ val myP = object: ArgParser4<String,Int,Unit,Unit>(
   moreArgs = listOf(
     arg("xxx", "added for rescue", "", ""),
     arg("map", "build map", "k v", repeatable = true, convert = multiParam { it[0] to it[1] })),
-  itemNames=listOf("ah"), itemMode=PositionalMode.MustBefore,
+  itemArgs=listOf(arg("ah", "ah ha")), itemMode=PositionalMode.MustBefore,
   autoSplit=listOf("name", "count"),
   flags=*arrayOf(arg("v", "enable verbose mode"))
 ) {
@@ -184,7 +184,7 @@ val yourP = ArgParser4(
   arg<Int>("count c", "number of widgets", "") { it.toInt() },
   arg<File>("I", "directory to search for header files", "file", repeatable = true) { File(it) },
   arg("mode", "mode of operation", "", "small").checkOptions("fast", "small", "quite"),
-  itemNames = listOf("source", "dest"), itemMode = PositionalMode.MustAfter,
+  itemArgs = listOf(arg("source",""), arg("dest","")), itemMode = PositionalMode.MustAfter,
   flags = *arrayOf(helpArg)
 )
 
@@ -241,7 +241,7 @@ object AWKArgParser: ArgParser4<File, String, String, String>(
     "lint-old" to "t"
   ) +arrayOf(helpArg, arg("version V", "print version") { println("GNU Awk 5.0.1, API: 3.0"); SwitchParser.stop() }),
   autoSplit = "F E v d D L l o p".split(),
-  itemNames = listOf("..."), itemMode = PositionalMode.MustAfter,
+  itemArgs = listOf(arg("...","")), itemMode = PositionalMode.MustAfter,
   moreArgs = listOf(
     argFileD("dump-variables= d", "dump vars to file", "file"),
     argFileD("debug= D", "debug", "file"),
