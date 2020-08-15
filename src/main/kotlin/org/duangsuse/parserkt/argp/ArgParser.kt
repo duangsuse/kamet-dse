@@ -5,7 +5,7 @@ import org.duangsuse.parserkt.Tuple4
 // Argument patters: flag(no-arg)/action, argument:optional/repeatable
 
 /** Argument with name, help, optional param+defaultValue(repeated:initial)+convert? name/param is separated with " ", better put shorthands second */
-data class Arg<R>(
+data class Arg<out R>(
   val name: String, val help: String, val param: String?, val defaultValue: R?,
   val repeatable: Boolean, val convert: Convert<R>) {
   inline val isFlag get() = (param == null)
@@ -15,8 +15,10 @@ data class Arg<R>(
   override fun toString() =  param?.let { "[$firstName $it]" + (if (repeatable) "*" else "") } ?: firstName
 }
 
-private typealias DynArg = Arg<out Any>
-private typealias DynArgParser = ArgParser4<*,*,*,*> //< addSub type checking is impossible, only dynamic is used
+private typealias DynArg = Arg<Any?>
+internal typealias DynArgParser = ArgParser4<*,*,*,*> //< addSub type checking is impossible, only dynamic is used
+internal typealias DynArgParserUnit = ArgParser4<Unit,Unit,Unit,Unit>
+internal typealias DynParseResult = ParseResult<*,*,*,*>
 private typealias OM<E> = OneOrMore<E>
 private typealias DynOM = OM<Any>
 open class ParseResult<A, B, C, D>(
@@ -55,7 +57,7 @@ open class ArgParser4<A,B,C,D>(
   protected open val subCommands: MutableMap<String, DynArgParser> = mutableMapOf()
   protected open val subCommandHelps: MutableMap<String, String> = mutableMapOf()
 
-  private val typedArgs = @Suppress("unchecked_cast") (listOf(p1, p2, p3, p4) as List<DynArg>)
+  private val typedArgs = listOf(p1, p2, p3, p4)
   private val allArgs = (typedArgs + flags + (moreArgs ?: emptyList())).filterNotNoArg()
   init {
     for (p in allArgs) if (p.isFlag && p !in flags) error("flag $p should be putted in ArgParser(flags = ...)")
@@ -67,7 +69,7 @@ open class ArgParser4<A,B,C,D>(
   }
   private var lastDriver: Driver? = null
   @Suppress("UNCHECKED_CAST") //< this is only used in sub-commands run (onItem)
-  private fun runTo(res: ParseResult<*,*,*,*>?, args: ArgArray) = Driver(args, res as ParseResult<A,B,C,D>?).also { lastDriver = it }.run()
+  private fun runTo(res: DynParseResult?, args: ArgArray) = Driver(args, res as ParseResult<A,B,C,D>?).also { lastDriver = it }.run()
   /** Parse input [args], could throw [SwitchParser.ParseError] */
   fun run(args: ArgArray) = runTo(null/*tree root parser*/, args)
   /** Reconstruct input back from [result], note that dynamic/converted args are not always handled. sub-commands are not supported */
@@ -189,10 +191,12 @@ open class ArgParser4<A,B,C,D>(
       fun addArg(p: Arg<*>, res: Any) {
         if (res == p.defaultValue) { return }
         argLine.add("$deftPrefix${if (use_shorthand) p.secondName else p.firstName}")
+        fun add(param: Any?) { argLine.add(param?.let(::showParam) ?: "$param"/*null*/) }
         if (p.param?.split()?.size?:0 > 1) when (res) { // multi-param
-          is Pair<*, *> -> res.run { argLine.add("$first"); argLine.add("$second") }
-          is Iterable<*> -> res.mapTo(argLine, Any?::toString)
-        } else argLine.add("$res") //< single param
+          is Pair<*, *> -> res.run { add(first) ; add(second) }
+          is Triple<*, *, *> -> res.run { add(first) ; add(second) ; add(third) }
+          is Iterable<*> -> res.forEach(::add)
+        } else add(res) //< single param
       }
       fun addArg(p: Arg<*>, sto: DynOM) {
         fun add(res: Any) = addArg(p, res)
@@ -281,6 +285,8 @@ open class ArgParser4<A,B,C,D>(
     if (prefix == "--" && name.length == 1) throw SwitchParser.ParseError(capPre("single-char shorthand should like: -$name"))
   }
   protected open fun checkResult(result: ParseResult<A, B, C, D>) {}
+  /** Un-parse method used in [backRun]. call super ?: (your case) */
+  protected open fun showParam(param: Any): String? = param.takeIf { it is Enum<*> }?.let { "$it".toLowerCase() }
 
   /** Register another [ArgParser4] as named sub, map their typed tuple args to [ParseResult.named]. see also: [commandAliases], [allArgs] */
   fun addSub(name: String, help: String, argp: DynArgParser) {
@@ -289,7 +295,7 @@ open class ArgParser4<A,B,C,D>(
   }
 
   /** Delegate for [ArgParser4]'s [addSub]. [checkResult] is re-implemented to map [ParseResult.named] back. */
-  open class ArgParserAsSubDelegate(private val argp: DynArgParser): ArgParser4<Unit,Unit,Unit,Unit>(noArg, noArg, noArg, noArg,
+  open class ArgParserAsSubDelegate(private val argp: DynArgParser): DynArgParserUnit(noArg, noArg, noArg, noArg,
     *argp.flags, itemArgs=argp.itemArgs, moreArgs=argp.typedArgs.filterNotNoArg() + (argp.moreArgs?:emptyList()), autoSplit=argp.autoSplit, itemMode=argp.itemMode) {
     override val commandAliases = argp.commandAliases
     override val subCommands = argp.subCommands
@@ -306,6 +312,7 @@ open class ArgParser4<A,B,C,D>(
       val (a, b, c, d) = argp.typedArgs.map { if (it == noArg) OM<Any>(Unit) else result.named!!/*more=typedArgs,!null*/.getMutable()!![it.firstName]!!/*run->assignDefault,!null*/ }
       dynArgp.checkResult(result.run { ParseResult(Tuple4(a,b,c,d), flags, items, named) })
     }
+    override fun showParam(param: Any) = argp.showParam(param)
   } //^ Kotlin by auto-delegate could not be used, since public interface is required.
 }
 

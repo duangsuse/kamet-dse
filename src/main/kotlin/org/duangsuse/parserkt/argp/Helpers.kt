@@ -68,9 +68,12 @@ fun Char.repeats(n: Int): String {
   return sb.toString()
 }
 
-fun String.splitArgv() = split(" ").toTypedArray()
+/** Space+Tab+CRLF */val whiteSpaces = charArrayOf(' ', '\t', '\r', '\n')
+/** Trim, and split using [whiteSpaces] */
+fun String.splitArgv() = trim(*whiteSpaces).split(*whiteSpaces).toTypedArray()
 fun String.takeUnlessEmpty() = takeUnless { it.isEmpty() }
 fun String.takeNotEmptyOr(value: String) = takeUnlessEmpty() ?: value
+fun String.showIf(p: Boolean) = if (p) this else ""
 fun String?.showIfPresent(transform: (String) -> String) = this?.let(transform) ?: ""
 
 inline fun <T> Iterable<T>.joinToBreakLines(sb: StringBuilder, separator: String, line_limit: Int, line_separator: String, crossinline transform: (T) -> CharSequence): StringBuilder {

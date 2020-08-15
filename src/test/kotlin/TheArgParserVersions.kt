@@ -3,6 +3,7 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
+import kotlin.test.assertTrue
 
 // https://github.com/jshmrsn/karg#example-usage
 /**
@@ -43,8 +44,8 @@ object KArgParserExample2 {
     items = listOf(arg("sourceFile", ""), arg("targetFile", ""))
   ) {
   }
-  fun compareFiles(file1: File, file2: File, ignoreCase: Boolean) {}
-  fun findDuplicates(directories: List<File>, ignoreCase: Boolean) {}
+  fun compareFiles(file1: File, file2: File, ignoreCase: Boolean) { println("diff $file1 $file2 ${"-i".showIf(ignoreCase)}") }
+  fun findDuplicates(directories: List<File>, ignoreCase: Boolean) { println("find_dup $directories $ignoreCase") }
 }
 
 // https://github.com/st235/ArgsParser#usage-example
@@ -154,6 +155,28 @@ class TheArgParserVersions {
     assertFails { p.run("mul") }
     val res1 = p.run("-o outs mul -addendums 25 -addendums 4")
     assertEquals(100, res1.named!!.getAs("addendums"))
+  }
+  @Suppress("unused_value") @Test fun kotlinXCliByParse() {
+    val ap = ArgParserBy("cli", argFileDI("input", "Input file"), argFileDI("output", "output file"))
+    var format by ap+arg("format f", "Format for output file", "fmt_output").options(KotlinXCliExample.Format.CSV)
+    var sf by (ap+arg("sf", "Format as string for output file", "fmt_output", "csv").checkOptions("csv", "html", "pdf")).multiply()
+    var epSec by ap+arg("eps", "Observational error", "sec", 0.01) { it.toDouble() }
+    var debug by ap.flag("debug d", "Turn on debug mode")
+    var input by ap.named<File>("input")
+    var output by ap.named<File>("output")
+    assertEquals(emptyList(), ap.run("-format csv -sf pdf -sf html -d a.csv b.pdf".splitArgv()))
+    assertEquals(KotlinXCliExample.Format.CSV, format)
+    assertEquals(listOf("pdf", "html"), sf)
+    assertEquals("a.csv", input.name)
+    assertEquals("b.pdf", output.name)
+    assertEquals(0.01, epSec)
+    assertTrue(debug)
+    format = KotlinXCliExample.Format.PDF
+    sf = sf + listOf("csv")
+    epSec = 1.0
+    debug = false
+    input = File("new.csv") ; output = File("new.pdf")
+    assertEquals("-format pdf -sf pdf -sf html -sf csv -eps 1.0 new.csv new.pdf".split(), ap.backRun().toList())
   }
 }
 
