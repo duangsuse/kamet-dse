@@ -1,7 +1,20 @@
 package org.duangsuse.parserkt.argp
 
+import kotlin.reflect.KProperty
+
+internal typealias KP = KProperty<*>
+
 typealias ArgArray = Array<out String>
 typealias Convert<R> = ((String) -> R)?
+
+/** Platform-dependent environment polyfill for getenv/prompt/writeErr support */
+interface Env {
+  fun getEnv(name: String): String?
+  fun promptForLine(): String
+  fun write(text: String)
+  fun writeErr(text: String)
+  val lineSeparator: String
+}
 
 inline fun <reified R> arg(
   name: String, help: String, param: String? = null,
@@ -83,7 +96,7 @@ inline fun <T> Iterable<T>.joinToBreakLines(sb: StringBuilder, separator: String
     val line = transform(it).also { line -> lineSize += line.length + (sb.length - lastLength) ; lastLength = sb.length  }
     if (lineSize < line_limit) line
     else (line_separator + line).also { lineSize = 0 }
-  }.also { if (lineSize == 0) sb.deleteLast(line_separator.length+1) }
+  }.also { if (lineSize == 0 && sb.isNotEmpty()) sb.deleteLast(line_separator.length+1) }
 }
 fun java.lang.StringBuilder.deleteLast(n: Int) {
   delete(length - (n-1), length)

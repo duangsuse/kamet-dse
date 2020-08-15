@@ -148,6 +148,8 @@ class TheArgParserVersions {
         -output -o: Output file
 
     """.trimIndent(), p.toString(groups = mapOf("*" to "Options", "(subcmd)" to "Subcommands"), indent = " "))
+    p.addHelpSubCommand()
+    p.run("help")
     val res = p.run("-o hello summary -i -addendums 12 -addendums 3")
     assertEquals("hello", res.tup.e1.get())
     assertEquals(-15, res.named!!.getAs("addendums"))
@@ -219,6 +221,12 @@ object KotlinXCliSubcmdExample: ArgParser1<String>(
   }
   init { addSub("summary", "Calculate summary", Summary) ; addSub("mul", "Multiply", Multiply) }
 }
+
+// https://github.com/aPureBase/arkenv
+
+
+// https://github.com/airlift/airline
+
 
 internal fun <A,B,C,D> ArgParser4<A,B,C,D>.run(text: String) = run(text.splitArgv())
 internal fun argFileDI(name: String, help: String) = argFileD(name, help, param = null, default_value = null)

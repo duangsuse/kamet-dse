@@ -1,9 +1,5 @@
 package org.duangsuse.parserkt.argp
 
-import kotlin.reflect.KProperty
-
-private typealias KP = KProperty<*>
-
 /** [ArgParser4] class constructed with val by delegate support, using [flags] / [arg] ordered call side-effect(not direct value)s */
 class ArgParserBy<ITEM>(private val prog: String, vararg val items: Arg<ITEM>) {
   private val flags: MutableList<Arg<*>> = mutableListOf()

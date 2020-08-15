@@ -18,6 +18,7 @@ private typealias DynArg = Arg<Any?>
 internal typealias DynArgParser = ArgParser4<*,*,*,*> //< addSub type checking is impossible, only dynamic is used
 internal typealias DynArgParserUnit = ArgParser4<Unit,Unit,Unit,Unit>
 internal typealias DynParseResult = ParseResult<*,*,*,*>
+internal typealias DynParseResultUnit = ParseResult<Unit,Unit,Unit,Unit>
 private typealias OM<E> = OneOrMore<E>
 private typealias DynOM = OM<Any>
 open class ParseResult<A, B, C, D>(
@@ -86,8 +87,12 @@ open class ArgParser4<A,B,C,D>(
   private fun runTo(res: DynParseResult?, args: ArgArray) = Driver(args, res as ParseResult<A,B,C,D>?).run()
   /** Parse input [args], could throw [SwitchParser.ParseError]. see also [backRun], [addSub], [toString] */
   fun run(args: ArgArray) = runTo(null/*tree root parser*/, args)
+
+  protected open fun rescueMissing(p: Arg<*>): Any? = null
   /** Check [result]'s flags, params or named map, see also: [NamedMap], [OneOrMore] */
   protected open fun checkResult(result: ParseResult<A,B,C,D>) {}
+  /** Pre-check and fill [result]'s storage, if [SwitchParser.ParseStop] is thrown then post-processes are ignored */
+  protected open fun preCheckResult(result: ParseResult<A,B,C,D>) {}
 
   private val dynamicNameMap = moreArgs?.run { associateByAll { it.names } }
   private val flagMap = flags.asIterable().associateByAll { it.names }
@@ -183,11 +188,12 @@ open class ArgParser4<A,B,C,D>(
     private fun parseError(message: String): Nothing = throw ParseError(prefixMessageCaps().first(message))
     private fun missing(p: Arg<*>) = if (!p.repeatable) parseError("missing argument $deftPrefix${p.firstName} ${p.param}: ${p.help}") else null
     private fun assignDefaultOrFail(p: Arg<*>, sto: DynOM) {
-      if (!p.repeatable) { sto.value = sto.value ?: p.defaultValue ?: missing(p) }
-      else { if (sto.size == 0) p.defaultValue?.let(sto::add) ?: missing(p) }
+      if (!p.repeatable) { sto.value = sto.value ?: p.defaultValue ?: rescueMissing(p) ?: missing(p) }
+      else { if (sto.size == 0) p.defaultValue?.let(sto::add) ?: rescueMissing(p) ?: missing(p) }
     }
     override fun run() = super.run().also { //<v post check & init default
       if (it.isEarlyStopped) return@also
+      try { preCheckResult(it) } catch (_: ParseStop) { return@also } //< for more filling mechanism
       argToOMs.forEach { (p, sto) -> assignDefaultOrFail(p, sto) }
       moreArgs?.forEach { p -> assignDefaultOrFail(p, dynamicResult!!.getOrPutOM(p.firstName)) }
       if (itemMode == PositionalMode.MustAfter) {
@@ -294,6 +300,9 @@ open class ArgParser4<A,B,C,D>(
     val newP = ArgParserAsSubDelegate(argp) //^ only all-4 typed arg is noArg can be used later in runTo(parent_res, args)
     subCommandHelps[name] = help ; subCommands[name] = newP //^ inherit from argp. split secondary constructor is too complex so just reassign
   }
+  fun getSub(path: Iterable<String>) = path.fold(initial = this as DynArgParser) { point, k ->
+    point.subCommands[k] ?: throw NoSuchElementException("missing key $k @${point.subCommands}") }
+  fun getSubHelp(name: String) = subCommandHelps.getValue(name)
 
   /** Delegate for [ArgParser4]'s [addSub]. [checkResult] is re-implemented to map [ParseResult.named] back. */
   open class ArgParserAsSubDelegate(private val argp: DynArgParser): DynArgParserUnit(noArg, noArg, noArg, noArg,
@@ -304,14 +313,20 @@ open class ArgParser4<A,B,C,D>(
     override val deftPrefix = argp.deftPrefix
     override val prefixes = argp.prefixes
     override fun rescuePrefix(name: String): Arg<*> = argp.rescuePrefix(name)
+    override fun rescueMissing(p: Arg<*>): Any? = argp.rescueMissing(p)
     override fun prefixMessageCaps() = argp.prefixMessageCaps()
     override fun printHelp() = argp.printHelp()
     override fun checkAutoSplitForName(name: String, param: String) = argp.checkAutoSplitForName(name, param)
     override fun checkPrefixForName(name: String, prefix: String) = argp.checkPrefixForName(name, prefix)
-    override fun checkResult(result: ParseResult<Unit, Unit, Unit, Unit>) {
+    override fun checkResult(result: DynParseResultUnit) = runResultCheck(result) { checkResult(it) }
+    override fun preCheckResult(result: DynParseResultUnit) = runResultCheck(result) {
+      try { preCheckResult(it) } finally { result.flags = it.flags }
+    }
+    private fun runResultCheck(result: DynParseResultUnit, op: ArgParser4<Any,Any,Any,Any>.(ParseResult<Any,Any,Any,Any>) -> Unit) {
       val dynArgp = @Suppress("unchecked_cast") (argp as ArgParser4<Any,Any,Any,Any>)
       val (a, b, c, d) = argp.typedArgs.map { if (it == noArg) DynOM(Unit) else result.named!!/*more=typedArgs,!null*/.getMutable()!![it.firstName]!!/*run->assignDefault,!null*/ }
-      dynArgp.checkResult(result.run { ParseResult(Tuple4(a,b,c,d), flags, items, named) })
+      val newRes = result.run { ParseResult(Tuple4(a,b,c,d), flags, items, named) }
+      dynArgp.op(newRes)
     }
     override fun showParam(param: Any) = argp.showParam(param)
   } //^ Kotlin by auto-delegate could not be used, since public interface is required.

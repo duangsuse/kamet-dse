@@ -20,3 +20,12 @@ fun argFile(name: String, help: String, param: String? = "path", default_value: 
   }
   file
 }
+
+object EnvJvm: Env {
+  override fun getEnv(name: String): String? = System.getenv(name)
+  private val reader = System.`in`.bufferedReader()
+  override fun promptForLine(): String = reader.readLine()
+  override fun write(text: String) = print(text)
+  override fun writeErr(text: String) = System.err.print(text)
+  override val lineSeparator = System.lineSeparator()!!
+} //^ multi-platform later!
