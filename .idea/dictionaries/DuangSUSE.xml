@@ -6,6 +6,7 @@
       <w>conv</w>
       <w>deref</w>
       <w>elim</w>
+      <w>funcly</w>
       <w>infixl</w>
       <w>infixr</w>
       <w>licm</w>
