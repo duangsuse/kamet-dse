@@ -51,6 +51,7 @@ abstract class ArgParserHandlers {
 
 private typealias AL = List<DynArg>/*< too long :) */
 private val eAL: AL = emptyList()
+const val SPREAD = "..." //< spread itemArg name
 
 val noArg: Arg<Unit> = arg<Unit>("\u0000\u0000", "") { error("noArg parsed") }
 val helpArg = arg("h help", "print this help") { SwitchParser.stop() }
@@ -103,7 +104,7 @@ open class ArgParser4<A,B,C,D>(
     private fun MutableMap<String, DynOM>.getOrPutOM(key: String) = getOrPut(key) { DynOM() }
     private fun ensureDynamicResult() = dynamicResult ?: error("add moreArgs for rescue")
     private fun DynOM.addResult(p: Arg<*>, res: Any, name: String) {
-      if (p.repeatable) add(res)
+      if (p.repeatable || name == SPREAD) add(res)
       else value = if (value == null) res else argDuplicateFail(name)
     }
 
@@ -115,7 +116,7 @@ open class ArgParser4<A,B,C,D>(
     private var lastPosit = 0 //v all about positional args
     private val itemArgZ = itemArgs.iterator()
     private val caseName = if (itemMode == PositionalMode.MustBefore) "all-before" else "all-after"
-    private val isVarItem = itemArgs.lastOrNull()?.name == "..."
+    private val isVarItem = itemArgs.lastOrNull()?.name == SPREAD //< reversed order spread arg is not directly supported
     private inline val isItemLess get() = !isVarItem && itemArgZ.hasNext()
     private fun positFail(): Nothing {
       val (capPre, capMsg) = prefixMessageCaps()
@@ -207,11 +208,11 @@ open class ArgParser4<A,B,C,D>(
   }
 
   /** Reconstruct input back from [result], note that dynamic/converted args are not always handled. sub-commands are not supported */
-  fun backRun(result: ParseResult<A,B,C,D>, use_shorthand: Boolean = false): ArgArray {
+  fun backRun(result: ParseResult<A,B,C,D>, use_shorthand: Boolean = false, transform_items: (List<String>) -> List<String> = {it}): ArgArray {
     val argLine: MutableList<String> = mutableListOf()
     val itemArgNames = itemArgs.mapTo(mutableSetOf()) { it.name }
     fun addItems() {
-      result.items.forEach { argLine.add(it) }
+      result.items.let(transform_items).forEach { argLine.add(it) }
       result.named?.map?.forEach { (k, v) -> if (k in itemArgNames) argLine.add("${v.get()}") }
     } // order branched
     fun addArg(p: Arg<*>, res: Any) {

@@ -159,13 +159,13 @@ class TheArgParserVersions {
     assertEquals(100, res1.named!!.getAs("addendums"))
   }
   @Suppress("unused_value") @Test fun kotlinXCliByParse() {
-    val ap = ArgParserBy("cli", argFileDI("input", "Input file"), argFileDI("output", "output file"))
+    val ap = ArgParserBy("cli")
     var format by ap+arg("format f", "Format for output file", "fmt_output").options(KotlinXCliExample.Format.CSV)
     var sf by (ap+arg("sf", "Format as string for output file", "fmt_output", "csv").checkOptions("csv", "html", "pdf")).multiply()
     var epSec by ap+arg("eps", "Observational error", "sec", 0.01) { it.toDouble() }
     var debug by ap.flag("debug d", "Turn on debug mode")
-    var input by ap.named<File>("input")
-    var output by ap.named<File>("output")
+    var input by ap.item(argFileDI("input", "Input file"))
+    var output by ap.item(argFileDI("output", "output file"))
     assertEquals(emptyList(), ap.run("-format csv -sf pdf -sf html -d a.csv b.pdf".splitArgv()))
     assertEquals(KotlinXCliExample.Format.CSV, format)
     assertEquals(listOf("pdf", "html"), sf)
@@ -180,6 +180,26 @@ class TheArgParserVersions {
     input = File("new.csv") ; output = File("new.pdf")
     assertEquals("-format pdf -sf pdf -sf html -sf csv -eps 1.0 new.csv new.pdf".split(), ap.backRun().toList())
   }
+  // https://github.com/xenomachina/kotlin-argparser-example/blob/master/src/main/kotlin/com/xenomachina/argparser/example/Main.kt
+  @Test fun kotlinArgParserExample() {
+    val ap = ArgParserBy("example")
+    val verbose by ap.flag("verbose v", "enable verbose mode")
+    val name by ap+arg("name N", "name of the widget", "","John Doe")
+    val size by ap+argInt("size s", "size of the plumbus")
+    val includeDirs by (ap+argFileD("I", "directory to search for header files")).multiply()
+    val optimizeFor by ap+arg("optimize-for", "what to optimize for", "").options(OptimizationMode.FAST,
+      "good" to OptimizationMode.GOOD,
+      "fast" to OptimizationMode.FAST,
+      "cheap" to OptimizationMode.CHEAP)
+    val sources by ap.items(argFileDI("...", "source filenames"))
+    val dest by ap.item(argFileDI("DEST", "destination filename"))
+    ap.autoSplit("I")
+    assertEquals(emptyList(), ap.run("a b c d -v -Ix -Iy -size 23 -optimize-for cheap".splitArgv()))
+    assertEquals(listOf("a","b","c"), sources.map { it.name })
+    assertEquals("d", dest.name)
+    assertEquals(listOf(true, "John Doe", 23, listOf("x", "y"), OptimizationMode.CHEAP), listOf(verbose, name, size, includeDirs.map { it.name }, optimizeFor))
+  }
+  enum class OptimizationMode { GOOD, FAST, CHEAP }
 }
 
 // https://github.com/Kotlin/kotlinx-cli#example
@@ -223,7 +243,14 @@ object KotlinXCliSubcmdExample: ArgParser1<String>(
 }
 
 // https://github.com/aPureBase/arkenv
-
+// https://apurebase.gitlab.io/arkenv/guides/the-basics/#profiles is not supported. impl it yourself
+object ArkenvExample: ArgParser4<String, Int, Int, List<String>>(
+  arg("country", "").getEnv(),
+  argInt("port p this-can-be-set-via-env", "An Int with a default value and custom names", "").env(),
+  argInt("null-int", "A nullable Int, which doesn't have to be declared", "n", 0).env(),
+  arg<List<String>>("mapped", "Complex types can be achieved with a mapping", "names") { it.split("|") },
+  arg("bool", "A bool, which will be false by default")
+) // Tuple by idx delegate is not possible, since this project unlinked from funcly-ParserKt Tuple4
 
 // https://github.com/airlift/airline
 

@@ -14,12 +14,16 @@ interface Env {
   fun write(text: String)
   fun writeErr(text: String)
   val lineSeparator: String
+  companion object Constants {
+    val sys: Env = EnvJvm
+  }
 }
 
-inline fun <reified R> arg(
+inline fun <reified R> arg( //v of generic R, string and int (default provided)
   name: String, help: String, param: String? = null,
   default_value: R? = null, repeatable: Boolean = false, noinline convert: Convert<R>): Arg<R>
   = Arg(name, help, if (param == "") name.split(' ').first() else param, default_value, repeatable, convert)
+
 fun arg(name: String, help: String, param: String? = null,
         default_value: String? = null, repeatable: Boolean = false, convert: Convert<String> = null)
   = arg<String>(name, help, param, default_value, repeatable, convert)
@@ -27,14 +31,14 @@ fun argInt(name: String, help: String, param: String? = "n",
            default_value: Int? = null, repeatable: Boolean = false, base: Int = 10)
   = arg(name, help, param, default_value, repeatable = repeatable) { it.toInt(base) }
 
-fun <R> Arg<String>.options(default_value: R?, map: Map<String, R>): Arg<R>
+fun <R> Arg<String>.options(default_value: R?, map: Map<String, R>): Arg<R> //v of Enum, (str to R), (str checked)
   = Arg(name, "$help in ${map.entries.joinToString(", ") {it.key}}", param, default_value, repeatable, map::getValue)
+
 inline fun <reified R: Enum<R>> Arg<String>.options(default_value: R?): Arg<R> = options(default_value, enumValues<R>().associateBy { it.name.toLowerCase() })
 fun <R> Arg<String>.options(default_value: R?, vararg pairs: Pair<String, R>): Arg<R> = options(default_value, mapOf(*pairs))
-
 fun Arg<String>.checkOptions(vararg strings: String) = options(defaultValue, *strings.map { it to it }.toTypedArray())
-fun <R> multiParam(convert: (List<String>) -> R): Convert<R> = { it.split('\u0000').let(convert) }
 
+fun <R> multiParam(convert: (List<String>) -> R): Convert<R> = { it.split('\u0000').let(convert) }
 fun defineFlags(vararg pairs: Pair<String, String>): Array<Arg<*>>
   = pairs.asIterable().map { arg("${it.first} ${it.second}", it.first.split("-").joinToString(" ")) }.toTypedArray()
 
@@ -64,7 +68,7 @@ enum class TextCaps {
     AllLower -> text.toLowerCase()
     Capitalized -> text.capitalize()
   }
-  companion object Constants {
+  companion object {
     val nonePair = None to None
   }
 }
@@ -73,6 +77,9 @@ internal fun <T> Iterable<T>.associateByAll(keySelector: (T) -> Iterable<String>
   val map: MutableMap<String, T> = mutableMapOf()
   for (item in this) for (k in keySelector(item)) map[k] = item
   return map
+}
+internal inline fun <K, V> MutableMap<K, V>.mapKey(key: K, transform: (V) -> V) {
+  this[key]?.let(transform)?.let { this[key] = it }
 }
 internal fun String.split() = split(' ')
 fun Char.repeats(n: Int): String {
