@@ -50,8 +50,8 @@ class ArgParserBy(private val prog: String) {
 
   fun flag(name: String, help: String, flag: String? = null) = By(this).Flag(if (flag != null) arg(name, help) { flag } else arg(name, help))
   operator fun <T> plus(p: Arg<T>) = By(this).Param(p)
-  fun <T> item(p: Arg<T>) = By(this).ByArg(p, true)
-  fun <T> items(p: Arg<T>) = By(this).ArgRepeat(p, true)
+  fun <T> item(p: Arg<T>) = By(this).ByArg(p.addNopConvert(), true)
+  fun <T> items(p: Arg<T>) = By(this).ArgRepeat(p.addNopConvert(), true)
   fun autoSplit(rules: String = "") { autoSplit = rules.split() }
   fun itemMode(mode: PositionalMode) { itemMode = mode }
 

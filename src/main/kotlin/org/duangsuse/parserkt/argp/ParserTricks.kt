@@ -27,6 +27,9 @@ fun Arg<String>.getEnv() = wrapHelpAndDefault { "$help, env ${firstName.envKey}"
 private val String.envKey get() = replace('-', '_').toUpperCase()
 
 fun <T> Arg<T>.wrapHelpAndDefault(op: Arg<T>.() -> Pair<String, T?>) = op(this).run { Arg(name, first, param, second, repeatable, convert) }
+fun <T, R> Arg<T>.wrapConvertAndDefault(default_value: R?, convert: Convert<R>): Arg<R> = Arg(name, help, param, default_value, repeatable, convert)
+/** Makes item arg result writes to [ParseResult.named], [Arg.convert] should not be null, see also [ArgParser4] */
+fun <T> Arg<T>.addNopConvert() = wrapConvertAndDefault(defaultValue) { convert?.invoke(it) ?: @Suppress("unchecked_cast") (it as T) }
 
 /** Support reversed-order item destruct `a b c [...]` to `[...] c b a` */
 fun <A,B,C,D> ArgParser4<A,B,C,D>.reversed() = run {

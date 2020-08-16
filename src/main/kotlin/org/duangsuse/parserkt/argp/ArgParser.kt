@@ -59,7 +59,9 @@ val helpArg = arg("h help", "print this help") { SwitchParser.stop() }
  *  subset of [SwitchParser]; add [Arg.convert] to [itemArgs] to store arg into [ParseResult.named].
  *  Arg order: `(param) (flags) (items) (more)` and [autoSplit]/[itemMode]
  *
- *  [addSub] is used to add [ArgParserAsSubDelegate] sub-commands, note that all arguments before sub's name are __just ignored__ by parent */
+ * [addSub] is used to add [ArgParserAsSubDelegate] sub-commands, note that all arguments before sub's name are __just ignored__ by parent
+ *
+ * When non-String [Arg] w/o convert as parser's item it will fail, as arg/named it's undefined behavior ([Arg.defaultValue] in [OneOrMore]) */
 open class ArgParser4<A,B,C,D>(
   val p1: Arg<A>, val p2: Arg<B>,
   val p3: Arg<C>, val p4: Arg<D>,
@@ -76,7 +78,7 @@ open class ArgParser4<A,B,C,D>(
   private val typedArgs = listOf(p1, p2, p3, p4)
   private val allArgs = (typedArgs + flags + (moreArgs ?: emptyList())).filterNotNoArg()
   init {
-    for (p in allArgs) if (p.isFlag && p !in flags) error("flag $p should be putted in ArgParser(flags = ...)")
+    for (p in allArgs) if (p.isFlag && p !in flags) error("flag $p w/o param should be putted in ArgParser(flags = ...)")
     for (p in flags) when { !p.isFlag -> error("$p in flags should not have param") ; p.defaultValue != null -> error("use convert to give default for flag $p") }
     for (p in itemArgs) when {
       p.defaultValue != null || p.repeatable -> error("named item $p should not repeatable or have default")
@@ -140,7 +142,7 @@ open class ArgParser4<A,B,C,D>(
       }
       arg.run { currentArg += " (" + param.showIfPresent {"$it of "} + "$firstName)"
         convert?.invoke(text)?.let { ensureDynamicResult().getOrPutOM(name).addResult(this, it, firstName) }
-      } ?: addItem()
+      } ?: addItem() //^ have-convert: store in map
       lastPosit++
     }
     //vv all about onPrefix handling. var autoSplitRes.

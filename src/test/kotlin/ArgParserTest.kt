@@ -46,7 +46,7 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String,Unit
     assertFailMessage("parse fail near --E (#3, arg 2): single-char shorthand should like: -E", "--hex af --E")
     assertFailMessage("bad argument 1, --hex's n: For input string: \".23\"", "--hex .23")
     assertFailMessage("parse fail near in -e (#6, arg 2): argument e repeated", "-e wtf mode -e twice x item")
-    assertEquals("flag wtf should be putted in ArgParser(flags = ...)",
+    assertEquals("flag wtf w/o param should be putted in ArgParser(flags = ...)",
       assertFailsWith<IllegalStateException> { ArgParser1(arg("wtf", "e mmm", param = null)).run("".splitArgv()) }.message)
     assertFailMessage("parse fail near -e (#1, arg 1): expecting stat for -e", "-e")
     assertFailMessage("parse fail near -e (#4, arg 2): expecting mode for -e", "-hex 23 -e wtf")

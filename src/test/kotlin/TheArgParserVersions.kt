@@ -200,6 +200,25 @@ class TheArgParserVersions {
     assertEquals(listOf(true, "John Doe", 23, listOf("x", "y"), OptimizationMode.CHEAP), listOf(verbose, name, size, includeDirs.map { it.name }, optimizeFor))
   }
   enum class OptimizationMode { GOOD, FAST, CHEAP }
+  data class ArgParser(val args: ArgArray) {
+    fun <T> parseInto(type: (ArgParserBy) -> T): T {
+      val ap = ArgParserBy("")
+      val res = type(ap)
+      ap.run(args) ; return res
+    }
+  }
+  class MyArgs(ap: ArgParserBy) {
+    val verbose by ap.flag("v", "enable verbose mode")
+    val name by ap+arg("name", "name of the user", "")
+    val count by ap+argInt("count", "number of the widgets")
+    val source by ap.item(arg("source", "source filename"))
+    val destination by ap.item(arg("dest", "destination filename"))
+  }
+  @Test fun argParserSimulatedDSL() {
+    ArgParser("-name Jake --count 233 a b".splitArgv()).parseInto(::MyArgs).run {
+      assertEquals(listOf("Jake", 233, "a", "b"), listOf(name, count, source, destination))
+    }
+  }
 }
 
 // https://github.com/Kotlin/kotlinx-cli#example
