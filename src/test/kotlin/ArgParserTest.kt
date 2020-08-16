@@ -96,9 +96,9 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String,Unit
   @Test fun unorderedFormats() {
     val pas = ArgParser4(arg("donkey", "donkey you rides", "name"), noArg, noArg, noArg, itemArgs = listOf(arg("papa",""), arg("mama","")))
     assertEquals("""
-      Usage: [-donkey name]
+      Usage: [-donkey name] <papa> <mama>
         -donkey: donkey you rides
-      options can be mixed with items: <papa> <mama>
+      options can be mixed with items.
     """.trimIndent(), pas.toString())
     assertEquals(listOf("A", "B"), pas.run(arrayOf("A", "-donkey", "ED2K", "B")).items)
   }
@@ -175,6 +175,8 @@ class ExtendArgParserTest: BaseArgParserTest<String, Int, Unit,Unit>(myP) {
         -v: enable verbose mode
         -xxx: added for rescue (default none)
         -map: build map
+        ah: ah ha
+        em: emm
 
     """.trimIndent(), myP.toString())
   }
@@ -242,7 +244,7 @@ object AWKArgParser: ArgParser4<File, String, String, String>(
     "lint-old" to "t"
   ) +arrayOf(helpArg, arg("version V", "print version") { println("GNU Awk 5.0.1, API: 3.0"); SwitchParser.stop() }),
   autoSplit = "F E v d D L l o p".split(),
-  itemArgs = listOf(arg("0", "") {it}, arg("...","")), itemMode = PositionalMode.MustAfter,
+  itemArgs = listOf(arg("0", "ss") {it}, arg("...","")), itemMode = PositionalMode.MustAfter,
   moreArgs = listOf(
     argFileD("dump-variables= d", "dump vars to file", "file"),
     argFileD("debug= D", "debug", "file"),
@@ -319,6 +321,7 @@ class AWKArgParserTests: BaseArgParserTest<File, String, String, String>(AWKArgP
       -lint= -L: lint level in fatal, invalid, no-ext (default none)
       -pretty-print= -o: pretty print to (default none)
       -profile= -p: use profile (default none)
+      0: ss
 
     """.trimIndent(), p.toString())
   }

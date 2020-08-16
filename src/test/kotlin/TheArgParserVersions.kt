@@ -109,13 +109,15 @@ class TheArgParserVersions {
   }
   @Test fun kotlinXCli() {
     assertEquals("""
-      Usage: example (-format -f fmt_output) (-eps sec) [-debug -d] [-h -help] {-sf fmt_output}
+      Usage: example (-format -f fmt_output) (-eps sec) [-debug -d] [-h -help] {-sf fmt_output} <input> <output>
         -format -f -> Format for output file in html, csv, pdf (default CSV)
         -eps -> Observational error (default 0.01)
         -debug -d -> Turn on debug mode
         -h -help -> print this help
         -sf -> Format as string for output file in html, csv, pdf (default csv)
-      options can be mixed with items: <input> <output>
+        input -> Input file
+        output -> Output file name
+      options can be mixed with items.
     """.trimIndent(), KotlinXCliExample.toString())
     val res = KotlinXCliExample.run("a.csv b.pdf -d --eps 0.1")
     res.run { val named = named!!

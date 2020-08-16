@@ -29,7 +29,12 @@ open class ParseResult<A, B, C, D>(
 }
 
 /** Order constraint for positional(no-prefix) args (comparing to prefix args) */
-enum class PositionalMode { MustBefore, MustAfter, Disordered }
+enum class PositionalMode {
+  MustBefore, MustAfter, Disordered;
+  inline val isMustBefore get() = this == MustBefore
+  inline val isMustAfter get() = this == MustAfter
+  inline val isDisordered get() = this == Disordered
+}
 
 fun NamedMap.getMutable() = map as? MutableMap //<^ dynamicRes & subParser MutableMap bind
 fun <T> Iterable<T>.filterNotNoArg() = filter { it != noArg }
@@ -115,7 +120,7 @@ open class ArgParser4<A,B,C,D>(
 
     private var lastPosit = 0 //v all about positional args
     private val itemArgZ = itemArgs.iterator()
-    private val caseName = if (itemMode == PositionalMode.MustBefore) "all-before" else "all-after"
+    private val caseName = if (itemMode.isMustBefore) "all-before" else "all-after"
     private val isVarItem = itemArgs.lastOrNull()?.name == SPREAD //< reversed order spread arg is not directly supported
     private inline val isItemLess get() = !isVarItem && itemArgZ.hasNext()
     private fun positFail(): Nothing {
@@ -129,8 +134,8 @@ open class ArgParser4<A,B,C,D>(
       commandAliases[text]?.forEach(::onArg)?.also { return } //<v recursion unchecked.
       subCommands[text]?.runTo(res, args.sliceArray(pos..args.lastIndex))?.also { stop() }
       fun addItem() = res.items.plusAssign(text)
-      if (itemMode != PositionalMode.Disordered && pos != lastPosit+1) { // check continuous (ClosedRange)
-        if (itemMode == PositionalMode.MustAfter && lastPosit == 0) lastPosit = pos-1 // one chance, late-initial posit. n-1 to keep in ++ later
+      if (!itemMode.isDisordered && pos != lastPosit+1) { // check continuous (ClosedRange)
+        if (itemMode.isMustAfter && lastPosit == 0) lastPosit = pos-1 // one chance, late-initial posit. n-1 to keep in ++ later
         else { addItem() ; positFail() } // zero initiated posit, fail.
       }
       val arg = when {
@@ -138,15 +143,15 @@ open class ArgParser4<A,B,C,D>(
         isVarItem -> itemArgs.last()
         else -> itemFail("many")
       }
-      arg.run { currentArg += " (" + param.showIfPresent {"$it of "} + "$firstName)"
-        convert?.invoke(text)?.let { ensureDynamicResult().getOrPutOM(name).addResult(this, it, firstName) }
+      arg.run { currentArg += " (" + param.showIfPresent {"$it of "} + "$name)"
+        convert?.invoke(text)?.let { ensureDynamicResult().getOrPutOM(name).addResult(this, it, name) }
       } ?: addItem() //^ have-convert: store in map
       lastPosit++
     }
     //vv all about onPrefix handling. var autoSplitRes.
     private fun checkPosition(): Unit = when {
-      (itemMode == PositionalMode.MustBefore && isItemLess) -> itemFail("less heading")
-      (itemMode == PositionalMode.MustAfter && res.items.isNotEmpty()) -> positFail()
+      (itemMode.isMustBefore && isItemLess) -> itemFail("less heading")
+      (itemMode.isMustAfter && res.items.isNotEmpty()) -> positFail()
       else -> {} //^ appeared-first is ok when items only, so no appear after param.
     }
     private fun readFlag(name: String): Boolean = flagMap[name]?.let {
@@ -197,7 +202,7 @@ open class ArgParser4<A,B,C,D>(
       try { preCheckResult(it) } catch (_: ParseStop) { return@also } //< for more filling mechanism
       argToOMs.forEach { (p, sto) -> assignDefaultOrFail(p, sto) }
       moreArgs?.forEach { p -> assignDefaultOrFail(p, dynamicResult!!.getOrPutOM(p.firstName)) }
-      if (itemMode == PositionalMode.MustAfter) {
+      if (itemMode.isMustAfter) {
         if (isItemLess) itemFail("less")
       } //^[if] less item parsed?
       checkResult(it)
@@ -229,7 +234,7 @@ open class ArgParser4<A,B,C,D>(
       fun add(res: Any) = addArg(p, res)
       sto.value?.let(::add) ?:/*repeated*/ sto.forEach(::add)
     }
-    if (itemMode == PositionalMode.MustBefore) addItems()
+    if (itemMode.isMustBefore) addItems()
     result.flags.forEach { argLine.add("$deftPrefix${it}") }
     for ((p, sto) in typedArgs.zip(result.tup.run { listOf(e1, e2, e3, e4) })) {
       @Suppress("unchecked_cast") addArg(p, sto as DynOM)
@@ -239,34 +244,36 @@ open class ArgParser4<A,B,C,D>(
       val p = dynamicNameMap?.get(k) ?: error("nonexistent arg named $k")
       addArg(p, v)
     } //^ and for dynRes
-    if (itemMode == PositionalMode.MustAfter || itemMode == PositionalMode.Disordered) addItems()
+    if (itemMode.isMustAfter || itemMode.isDisordered) addItems()
     return argLine.toTypedArray()
   }
 
   /** [caps]: (param to help) ; [row_max]: in summary, max line len ; [groups]: "*" to "Options", "(subcmd)" to "Subcmd", "a b c" to "SomeGroup" */
   fun toString(
     caps: Pair<TextCaps, TextCaps> = (TextCaps.None to TextCaps.None), row_max: Int = 70,
-    prog: String = "", head: String = "Usage: ", epilogue: String = "",
+    head: String = "Usage: ", prog: String = "", prologue: String = "", epilogue: String = "",
     indent: String = "  ", space: String = " ", colon: String = ": ", comma: String = ", ", newline: String = "\n",
-    groups: Map<String, String>? = null, transform_summary: ((String) -> String)? = {it}, recursive: Boolean = true): String {
+    groups: Map<String, String>? = null, transform_summary: ((String) -> String)? = {it}, recursion: Int = Int.MAX_VALUE): String {
     val sb = StringBuilder(head) ; prog.takeUnlessEmpty()?.let { sb.append(it).append(space) }
     val (capParam, capHelp) = caps
-    fun appendItemNames() = itemArgs.joinTo(sb, space) { "<${it.firstName}>" }
+    val hasItems = itemArgs.isNotEmpty()
+    fun appendItemNames() = itemArgs.joinTo(sb, space) { "<${it.name}>" }
     fun appendSummary(sb: StringBuilder) = allArgs.joinToBreakLines(sb, space, row_max, newline+' '.repeats(head.length)) {
       val surround: String = if (it.repeatable) "{}" else if (it.defaultValue != null) "()" else "[]"
       sb.append(surround[0]).append(it.prefixedNames())
       it.param?.split()?.joinTo(sb, comma, prefix = space) { param -> capParam(param) }
       sb.append(surround[1])
       return@joinToBreakLines ""
-    } //v begin building.
-    if (itemMode == PositionalMode.MustBefore) appendItemNames().append(space)
+    } //v begin building. items&summary
+    if (hasItems && itemMode.isMustBefore) appendItemNames().append(space)
     if (transform_summary == null) appendSummary(sb) else sb.append(appendSummary(StringBuilder()).toString().let(transform_summary))
-    if (itemMode == PositionalMode.MustAfter) { sb.append(space) ; appendItemNames() }
-    sb.append(newline) // detailed desc.
-    fun appendDesc(p: Arg<*>, groupIndent: String) {
+    if (hasItems && (itemMode.isMustAfter || itemMode.isDisordered)) { sb.append(space) ; appendItemNames() }
+    sb.append(newline).append(prologue) // detailed desc.
+    fun appendDesc(p: Arg<*>, groupIndent: String) { //< "\u0000" denotes itemArg
       if (p.help.isEmpty()) { return }
-      sb.append(groupIndent).append(indent)
-        .append(p.prefixedNames()).append(colon).append(capHelp(p.help))
+      if (groupIndent == "\u0000") { sb.append(indent).append(p.name) }
+      else { sb.append(groupIndent).append(indent).append(p.prefixedNames()) }
+      sb.append(colon).append(capHelp(p.help))
       p.defaultValue?.let { sb.append(" (default ${it.toString().takeNotEmptyOr("none")})") }
       sb.append(newline)
     }
@@ -277,20 +284,21 @@ open class ArgParser4<A,B,C,D>(
       val newIndent = groupIndent+indent
       for ((name, help) in subCommandHelps) {
         sb.append(groupIndent).append(indent).append(name).append(colon).append(help)
-        if (recursive) {
+        if (recursion >= 0) { //< run if have subcmd. theoretically Nat, not Int...
           sb.append(newline).append(newIndent)
-          .append(subCommands[name]!!.toString(caps, row_max, "", "", "", indent, space, colon, comma, newline+newIndent, groups, transform_summary, recursive))
+          .append(subCommands[name]!!.toString(caps, row_max, "", "", "", "",
+            indent, space, colon, comma, newline+newIndent, groups, transform_summary, recursion-1))
           sb.deleteLast(newIndent.length+1/*newline*/)
         }
-      } //^ this dizzy should be rewrote, truly... ~(w_w)_
+      } //^v this dizzy should be rewrote, truly... ~(w_w)_
+    } ; appendSubcmd()
+    if (groups == null) { for (p in allArgs) {appendDesc(p, "")} ; for (p in itemArgs) appendDesc(p, "\u0000") }
+    else { //v[if] append groups.
+      val grouping = (allArgs+itemArgs).groupBy { p -> groups.entries.firstOrNull { p.firstName in it.key.split() }?.value ?: groups["*"] ?: error("* required for default name") }
+      val itemSet = itemArgs.toSet() //< should use -- prefix?
+      grouping.forEach { (g, ps) -> sb.append(g).append(colon).append(newline) ; ps.forEach { appendDesc(it, if (it in itemSet) "\u0000" else indent) } }
     }
-    appendSubcmd()
-    if (groups == null) { for (p in allArgs) appendDesc(p, "") }
-    else { //v append groups if.
-      val grouping = allArgs.groupBy { p -> groups.entries.firstOrNull { p.name in it.key.split() }?.value ?: groups["*"] ?: error("* required for default name") }
-      grouping.forEach { (g, ps) -> sb.append(g).append(colon).append(newline) ; ps.forEach { appendDesc(it, indent) } }
-    }
-    if (itemMode == PositionalMode.Disordered && itemArgs.isNotEmpty()) { sb.append("options can be mixed with items: ".let(capHelp::invoke)); appendItemNames() }
+    if (hasItems && itemMode.isDisordered) { sb.append("options can be mixed with items.".let(capHelp::invoke)) }
     return sb.append(epilogue).toString()
   }
   private fun Arg<*>.prefixedNames() = names.joinToString(prefix = deftPrefix, separator = " $deftPrefix")
