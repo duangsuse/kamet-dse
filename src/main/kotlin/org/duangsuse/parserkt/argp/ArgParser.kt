@@ -59,11 +59,9 @@ val helpArg = arg("h help", "print this help") { SwitchParser.stop() }
  *  subset of [SwitchParser]; add [Arg.convert] to [itemArgs] to store arg into [ParseResult.named].
  *  Arg order: `(param) (flags) (items) (more)` and [autoSplit]/[itemMode]
  *
- * [addSub] is used to add [ArgParserAsSubDelegate] sub-commands, note that all arguments before sub's name are __just ignored__ by parent
- *
- * When non-String [Arg] w/o convert as parser's item it will fail, as arg/named it's undefined behavior ([Arg.defaultValue] in [OneOrMore]) */
+ * [addSub] is used to add [ArgParserAsSubDelegate] sub-commands, note that all arguments before sub's name are __just ignored__ by parent */
 open class ArgParser4<A,B,C,D>(
-  val p1: Arg<A>, val p2: Arg<B>,
+  val p1: Arg<A>, val p2: Arg<B>, //<v non-String [Arg] w/o convert as parser's arg/named is undefined behavior ([Arg.defaultValue] in [OneOrMore])
   val p3: Arg<C>, val p4: Arg<D>,
   vararg val flags: Arg<*>, val itemArgs: AL = eAL, val moreArgs: AL? = null,
   val autoSplit: List<String> = emptyList(),

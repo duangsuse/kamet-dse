@@ -194,6 +194,7 @@ class TheArgParserVersions {
     val sources by ap.items(argFileDI("...", "source filenames"))
     val dest by ap.item(argFileDI("DEST", "destination filename"))
     ap.autoSplit("I")
+    ap.asParser().run("i1 i2 o -size 0")
     assertEquals(emptyList(), ap.run("a b c d -v -Ix -Iy -size 23 -optimize-for cheap".splitArgv()))
     assertEquals(listOf("a","b","c"), sources.map { it.name })
     assertEquals("d", dest.name)
@@ -213,9 +214,16 @@ class TheArgParserVersions {
     val count by ap+argInt("count", "number of the widgets")
     val source by ap.item(arg("source", "source filename"))
     val destination by ap.item(arg("dest", "destination filename"))
+    val percentageSum by (ap+argInt("add-p", "add to percentages")).multiply { require(it.sum() == 100) ; it }
+    val ap1 = ArgParserBy("wtf")
+    val item by ap1.item(arg("apple", ""))
+    init {
+      ap.itemMode(PositionalMode.Disordered)
+      ap.addSub("test sub-command", ap1)
+    }
   }
   @Test fun argParserSimulatedDSL() {
-    ArgParser("-name Jake --count 233 a b".splitArgv()).parseInto(::MyArgs).run {
+    ArgParser("-name Jake --count 233 a b -add-p 50 -add-p 50".splitArgv()).parseInto(::MyArgs).run {
       assertEquals(listOf("Jake", 233, "a", "b"), listOf(name, count, source, destination))
     }
   }

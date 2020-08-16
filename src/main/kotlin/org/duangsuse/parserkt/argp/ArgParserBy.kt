@@ -62,5 +62,6 @@ class ArgParserBy(private val prog: String) {
   }
   fun backRun(): ArgArray = @Suppress("unchecked_cast") ap.backRun(res as ParseResult<Unit,Unit,Unit,Unit>)
   fun asParser(): DynArgParserUnit = ap
+  fun addSub(help: String, p: ArgParserBy) { asParser().addSub(p.prog, help, p.asParser()) }
   override fun toString() = asParser().toString(prog=this.prog)
 }
