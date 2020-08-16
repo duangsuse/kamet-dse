@@ -149,7 +149,7 @@ class TheArgParserVersions {
       Options: 
         -output -o: Output file
 
-    """.trimIndent(), p.toString(groups = mapOf("*" to "Options", "(subcmd)" to "Subcommands"), indent = " "))
+    """.trimIndent(), p.toString(groups = mapOf("*" to "Options", "(subcmd)" to "Subcommands"), indent = " ", recursion = 2))
     p.addHelpSubCommand()
     p.run("help")
     val res = p.run("-o hello summary -i -addendums 12 -addendums 3")

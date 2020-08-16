@@ -283,9 +283,9 @@ open class ArgParser4<A,B,C,D>(
       val groupIndent = if (group != null) indent else ""
       val newIndent = groupIndent+indent
       for ((name, help) in subCommandHelps) {
-        sb.append(groupIndent).append(indent).append(name).append(colon).append(help)
-        if (recursion >= 0) { //< run if have subcmd. theoretically Nat, not Int...
-          sb.append(newline).append(newIndent)
+        sb.append(groupIndent).append(indent).append(name).append(colon).append(help).append(newline)
+        if (recursion > 0) { //< run if have subcmd. theoretically Nat, not Int...
+          sb.append(newIndent)
           .append(subCommands[name]!!.toString(caps, row_max, "", "", "", "",
             indent, space, colon, comma, newline+newIndent, groups, transform_summary, recursion-1))
           sb.deleteLast(newIndent.length+1/*newline*/)
