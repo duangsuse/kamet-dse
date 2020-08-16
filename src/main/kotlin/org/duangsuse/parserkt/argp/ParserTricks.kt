@@ -3,7 +3,7 @@ package org.duangsuse.parserkt.argp
 import org.duangsuse.parserkt.argp.Env.Constants.sys
 
 private class HelpSubCommand(private val parent: DynArgParser, private val prog: String): DynArgParserUnit(noArg, noArg, noArg, noArg,
-  itemArgs = listOf(arg(SPREAD, "sub-command path"))) {
+  itemArgs = listOf(arg(SPREAD, ""))) {
   override fun preCheckResult(result: ParseResult<Unit, Unit, Unit, Unit>) {
     result.flags += "h" //< make parent-parser return early
     if (result.items.isEmpty()) { println(parent.toString()) ; return }
@@ -16,10 +16,13 @@ private class HelpSubCommand(private val parent: DynArgParser, private val prog:
     println("$prog${result.items.joinToString(" ")}: $help")
     println(subcmd.toString()) //^[val#1] try get&print or err&stop
   }
+
+  // returns empty.
+  override fun toString(caps: Pair<TextCaps, TextCaps>, row_max: Int, head: String, prog: String, prologue: String, epilogue: String, indent: String, space: String, colon: String, comma: String, newline: String, groups: Map<String, String>?, transform_summary: ((String) -> String)?, recursion: Int): String = ""
 }
 
 fun DynArgParser.addHelpSubCommand(prog: String = "") {
-  addSub("help", "show help for sub-command", HelpSubCommand(this, prog))
+  addSub("help", "show help for a sub-command", HelpSubCommand(this, prog))
 }
 
 /** Try loads env with key `SOME_NAME` from [Env.sys] first. see [getEnv] */

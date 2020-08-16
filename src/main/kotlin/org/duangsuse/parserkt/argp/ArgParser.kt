@@ -256,8 +256,8 @@ open class ArgParser4<A,B,C,D>(
     return argLine.toTypedArray()
   }
 
-  /** [caps]: e.g. (param to help) ; [row_max]: max line len in summary ; [groups]: "*" to "Options", "(subcmd)" to "Subcmd", "a b c" to "SomeGroup" */
-  fun toString(
+  /** [caps]: e.g. (param to help) ; [row_max]: max line len in summary ; [groups]: "*" to "Options", "" to "-", "(subcmd)" to "Subcmd", "a b c" to "SomeGroup" */
+  open fun toString(
     caps: Pair<TextCaps, TextCaps> = (TextCaps.None to TextCaps.None), row_max: Int = 70,
     head: String = "Usage: ", prog: String = "", prologue: String = "", epilogue: String = "",
     indent: String = "  ", space: String = " ", colon: String = ": ", comma: String = ", ", newline: String = "\n",
@@ -302,11 +302,13 @@ open class ArgParser4<A,B,C,D>(
     } ; appendSubcmd()
     if (groups == null) { for (p in allArgs) {appendDesc(p, "")} ; for (p in itemArgs) appendDesc(p, "\u0000") }
     else { //v[if] append groups.
-      val grouping = (allArgs+itemArgs).groupBy { p -> groups.entries.firstOrNull { p.firstName in it.key.split() }?.value ?: groups["*"] ?: error("* required for default name") }
+      val grouping = (allArgs+itemArgs).groupByTo(linkedMapOf()) { p ->
+        groups.entries.firstOrNull { p.firstName in it.key.split() }?.value ?: groups["*"] ?: error("* required for default name")
+      } ; grouping.remove("-")
       val itemSet = itemArgs.toSet() //< should use -- prefix?
       grouping.forEach { (g, ps) -> sb.append(g).append(colon).append(newline) ; ps.forEach { appendDesc(it, if (it in itemSet) "\u0000" else indent) } }
     }
-    if (hasItems && itemMode.isDisordered) { sb.append("options can be mixed with items.".let(capHelp::invoke)) }
+    if (hasItems && itemMode.isDisordered) { sb.append("options can be mixed with items.".let(capHelp::invoke)).append(newline) }
     return sb.append(epilogue).toString()
   }
   private fun Arg<*>.prefixedNames() = names.joinToString(prefix = deftPrefix, separator = " $deftPrefix")
@@ -346,6 +348,9 @@ open class ArgParser4<A,B,C,D>(
       dynArgp.op(newRes)
     }
     override fun showParam(param: Any) = argp.showParam(param)
+    override fun toString(caps: Pair<TextCaps, TextCaps>, row_max: Int, head: String, prog: String, prologue: String, epilogue: String, indent: String, space: String, colon: String, comma: String, newline: String, groups: Map<String, String>?, transform_summary: ((String) -> String)?, recursion: Int): String =
+      argp.toString(caps, row_max, head, prog, prologue, epilogue, indent, space, colon, comma, newline, groups, transform_summary, recursion)
+    override fun toString() = argp.toString()
   } //^ Kotlin by auto-delegate could not be used, since public interface is required.
 }
 

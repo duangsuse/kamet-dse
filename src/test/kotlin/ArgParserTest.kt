@@ -99,6 +99,7 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String,Unit
       Usage: [-donkey name] <papa> <mama>
         -donkey: donkey you rides
       options can be mixed with items.
+
     """.trimIndent(), pas.toString())
     assertEquals(listOf("A", "B"), pas.run(arrayOf("A", "-donkey", "ED2K", "B")).items)
   }

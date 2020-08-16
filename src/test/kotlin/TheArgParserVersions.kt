@@ -118,6 +118,7 @@ class TheArgParserVersions {
         input -> Input file
         output -> Output file name
       options can be mixed with items.
+
     """.trimIndent(), KotlinXCliExample.toString())
     val res = KotlinXCliExample.run("a.csv b.pdf -d --eps 0.1")
     res.run { val named = named!!
@@ -133,10 +134,10 @@ class TheArgParserVersions {
       Usage: [-output -o path]
       Subcommands: 
         summary: Calculate summary
-        [-invert -i] {-addendums n}
+        {-addendums n} [-invert -i]
         Options: 
-          -invert -i: Invert results
           -addendums: Addendums
+          -invert -i: Invert results
         mul: Multiply
         {-addendums n}
         Subcommands: 
@@ -282,6 +283,77 @@ object ArkenvExample: ArgParser4<String, Int, Int, List<String>>(
 ) // Tuple by idx delegate is not possible, since this project unlinked from funcly-ParserKt Tuple4
 
 // https://github.com/airlift/airline
+class AirLineExample {
+  @Test fun main() {
+    assertEquals("""
+      Usage: git
+      the stupid content tracker
+        help: show help for a sub-command
+        add: Add file contents to the index
+        {-p glob} [-i]
+        Options: 
+            -p: Patterns of files to be added
+            -i: Add modified contents interactively.
+        remote: Manage set of tracked repositories
+          show: Gives some information about the remote <name>
+          [-n] <name>
+          Options: 
+              -n: Do not query remote heads
+            name: Remote to show
+          add: Adds a remote
+          [-t] <...>
+          Options: 
+              -t: Track only a specific branch
+            ...: Remote repository to add
+    """.trimIndent()+"\n    ", Git.toString())
+    Git.run("add -p file")
+    Git.run("remote add origin git@github.com:airlift/airline.git")
+    Git.run("-v remote show origin")
+    assertEquals("""
+      Usage: pint (-count -c num) [-h -help]
+      network test utility
+        -count -c: Send count packets (default 1)
+        -h -help: print this help
+
+    """.trimIndent(), Ping.toString())
+    Ping.run("-c 5")
+    Ping.run("--help")
+  }
+  abstract class GitCmd<A>(param: Arg<A>, vararg flags: Arg<*>, items: List<Arg<*>> = emptyList()): ArgParser1<A>(param,
+    flags = *(flags.toList()+arg("v", "Verbose mode")).toTypedArray(), items = items)
+  object Git: GitCmd<Unit>(noArg) {
+    override fun toString() = toString(prog = "git", prologue = "the stupid content tracker\n",
+      groups = mapOf("*" to "Options", "v" to "-")).replace(Regex("""\s*(\[-v])|(options can be mixed with items\.)\s*"""), "")
+    init {
+      addHelpSubCommand("git")
+      addSub("add", "Add file contents to the index", Add)
+      addSub("remote", "Manage set of tracked repositories", Remote)
+    }
+    object Add: GitCmd<String>(
+      arg("p", "Patterns of files to be added", "glob", repeatable = true),
+      arg("i", "Add modified contents interactively.")
+    )
+    object Remote: GitCmd<Unit>(noArg) {
+      init {
+        addSub("show", "Gives some information about the remote <name>", Show)
+        addSub("add", "Adds a remote", Add)
+      }
+      object Show: GitCmd<Unit>(
+        noArg, arg("n", "Do not query remote heads"),
+        items = listOf(arg("name", "Remote to show"))
+      )
+      object Add: GitCmd<Unit>(
+        noArg, arg("t", "Track only a specific branch"),
+        items = listOf(arg("...", "Remote repository to add"))
+      )
+    }
+  }
+  object Ping: ArgParser1<Int>(
+    argInt("count c", "Send count packets", "num", 1), helpArg
+  ) {
+    override fun toString() = toString(prog = "pint", prologue = "network test utility\n")
+  }
+}
 
 
 internal fun <A,B,C,D> ArgParser4<A,B,C,D>.run(text: String) = run(text.splitArgv())
