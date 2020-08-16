@@ -9,11 +9,12 @@ private class HelpSubCommand(private val parent: DynArgParser, private val prog:
     if (result.items.isEmpty()) { println(parent.toString()) ; return }
     val helpContainer = parent.getSub(result.items.run { subList(0, size-1) })
     val name = result.items.last()
+    //^ subcmd parent/name got
     val subcmd = try { helpContainer.getSub(listOf(name))
     } catch (_: NoSuchElementException) { println("unknown sub-command $name in ${helpContainer.toString(head="cmd: ")}") ; SwitchParser.stop() }
     val help = helpContainer.getSubHelp(name)
     println("$prog${result.items.joinToString(" ")}: $help")
-    println(subcmd.toString())
+    println(subcmd.toString()) //^[val#1] try get&print or err&stop
   }
 }
 
@@ -28,7 +29,7 @@ private val String.envKey get() = replace('-', '_').toUpperCase()
 
 fun <T> Arg<T>.wrapHelpAndDefault(op: Arg<T>.() -> Pair<String, T?>) = op(this).run { Arg(name, first, param, second, repeatable, convert) }
 fun <T, R> Arg<T>.wrapConvertAndDefault(default_value: R?, convert: Convert<R>): Arg<R> = Arg(name, help, param, default_value, repeatable, convert)
-/** Makes item arg result writes to [ParseResult.named], or [Arg.convert] must not be null */
+/** Makes item arg result writes to [ParseResult.named], otherwise [Arg.convert] must not be null */
 fun <T> Arg<T>.addNopConvert() = wrapConvertAndDefault(defaultValue) { convert?.invoke(it) ?: @Suppress("unchecked_cast") (it as T) }
 
 /** Support reversed-order item destruct `a b c [...]` to `[...] c b a` */

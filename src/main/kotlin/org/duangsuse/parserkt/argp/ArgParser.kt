@@ -3,7 +3,7 @@ package org.duangsuse.parserkt.argp
 // Argument patters: flag(no-arg)/param(with action?)/item(converted=named?), argument:optional/repeatable
 data class Tuple4<A, B, C, D>(var e1: A, var e2: B, var e3: C, var e4: D) //< imported from funcly-ParserKt model
 
-/** Argument with name, help, optional param+defaultValue(repeated:initial)+convert? name/param is separated with " ", better put shorthands second */
+/** Argument with __name, help, optional param__+defaultValue?(repeated:initial)+convert? ; name/param is separated with `' '`, better put shorthands second */
 data class Arg<out R>(
   val name: String, val help: String, val param: String?, val defaultValue: R?,
   val repeatable: Boolean, val convert: Convert<R>) {
@@ -14,13 +14,16 @@ data class Arg<out R>(
   override fun toString() =  param?.let { "[$firstName $it]" + (if (repeatable) "*" else "") } ?: firstName
 }
 
-private typealias DynArg = Arg<Any?>
-internal typealias DynArgParser = ArgParser4<*,*,*,*> //< addSub type checking is impossible, only dynamic is used
+internal typealias DynArgParser = ArgParser4<*,*,*,*> //< type checking with addSubcmd support is impossible, so only dynamic is used
 internal typealias DynArgParserUnit = ArgParser4<Unit,Unit,Unit,Unit>
 internal typealias DynParseResult = ParseResult<*,*,*,*>
 internal typealias DynParseResultUnit = ParseResult<Unit,Unit,Unit,Unit>
+
 private typealias OM<E> = OneOrMore<E>
+private typealias DynArg = Arg<Any?> //< type shorthands for Arg/OneOrMore
 private typealias DynOM = OM<Any>
+
+/** [ArgParser4] result with typed [tup] + dynamic [named], and [flags] / string [items] */
 open class ParseResult<A, B, C, D>(
   val tup: Tuple4<OM<A>, OM<B>, OM<C>, OM<D>> = Tuple4(OM(), OM(), OM(), OM()),
   var flags: String = "", val items: MutableList<String> = mutableListOf(),
@@ -28,7 +31,7 @@ open class ParseResult<A, B, C, D>(
   val isEarlyStopped get() = ('h' in flags)
 }
 
-/** Order constraint for positional(no-prefix) args (comparing to prefix args) */
+/** Ordering constraint for positional(non-prefixed) items relative to other args */
 enum class PositionalMode {
   MustBefore, MustAfter, Disordered;
   inline val isMustBefore get() = this == MustBefore
@@ -39,11 +42,13 @@ enum class PositionalMode {
 fun NamedMap.getMutable() = map as? MutableMap //<^ dynamicRes & subParser MutableMap bind
 fun <T> Iterable<T>.filterNotNoArg() = filter { it != noArg }
 
+/** Handlers that can be overridden in [ArgParser4] like [printHelp]/[rescuePrefix]/[rescueMissing]. */
 abstract class ArgParserHandlers {
   protected open fun printHelp() = println(toString())
   protected open fun prefixMessageCaps() = TextCaps.nonePair
   /** Return-super if [name] still unknown, please note that [Arg.help] / (backRun) is never used, and one of [Arg.param] / [Arg.defaultValue] must be provided */
   protected open fun rescuePrefix(name: String): Arg<*> { throw SwitchParser.ParseError("$name unknown") }
+  protected open fun rescueMissing(p: Arg<*>): Any? = null
   protected open fun checkAutoSplitForName(name: String, param: String) {}
   /** Call-super first if and args like "--c" are rejected, note no [ArgParser4.autoSplit] is done on it's [name] */
   protected open fun checkPrefixForName(name: String, prefix: String) {
@@ -60,11 +65,12 @@ const val SPREAD = "..." //< spread itemArg name
 
 val noArg: Arg<Unit> = arg<Unit>("\u0000\u0000", "") { error("noArg parsed") }
 val helpArg = arg("h help", "print this help") { SwitchParser.stop() }
-/** Simple parser helper for no-multi (prefixed) param and up to 4 param storage(parse with items) [moreArgs],
- *  subset of [SwitchParser]; add [Arg.convert] to [itemArgs] to store arg into [ParseResult.named].
- *  Arg order: `(param) (flags) (items) (more)` and [autoSplit]/[itemMode]
+
+/** Simple parser helper makes use of [SwitchParser] with up to 4 typed storage ([Tuple4]) for (repeatable)prefixed param,
+ *  it also have dynamic param [moreArgs] Map (and [itemArgs]); add [Arg.convert] to item arg to store them into [ParseResult.named].
+ *  Arg order: `(param) (flags) (items) (more)`, and [autoSplit] names / [itemMode] positional arg check mode
  *
- * [addSub] is used to add [ArgParserAsSubDelegate] sub-commands, note that all arguments before sub's name are __just ignored__ by parent */
+ * [addSub] is used to add [ArgParserAsSubDelegate] sub-commands, note that all arguments after sub's name are __just ignored__ by parent */
 open class ArgParser4<A,B,C,D>(
   val p1: Arg<A>, val p2: Arg<B>, //<v non-String [Arg] w/o convert as parser's arg/named is undefined behavior ([Arg.defaultValue] in [OneOrMore])
   val p3: Arg<C>, val p4: Arg<D>,
@@ -91,11 +97,10 @@ open class ArgParser4<A,B,C,D>(
 
   @Suppress("UNCHECKED_CAST") //< this is only used in sub-commands run (onItem)
   private fun runTo(res: DynParseResult?, args: ArgArray) = Driver(args, res as ParseResult<A,B,C,D>?).run()
-  /** Parse input [args], could throw [SwitchParser.ParseError]. see also [backRun], [addSub], [toString] */
+  /** Parse input [args], could throw [SwitchParser.ParseError]. see also [backRun], [addSub], [toString], [checkResult] */
   fun run(args: ArgArray) = runTo(null/*tree root parser*/, args)
 
-  protected open fun rescueMissing(p: Arg<*>): Any? = null
-  /** Check [result]'s flags, params or named map, see also: [NamedMap], [OneOrMore] */
+  /** Check [result]'s flags, params or named map, see also: [NamedMap], [OneOrMore], [preCheckResult] */
   protected open fun checkResult(result: ParseResult<A,B,C,D>) {}
   /** Pre-check and fill [result]'s storage, if [SwitchParser.ParseStop] is thrown then post-processes are ignored */
   protected open fun preCheckResult(result: ParseResult<A,B,C,D>) {}
@@ -130,9 +135,12 @@ open class ArgParser4<A,B,C,D>(
     private fun itemFail(case_name: String): Nothing = parseError("too $case_name items (all $itemArgs)")
     private fun argDuplicateFail(name: String): Nothing = parseError("argument $name repeated")
 
-    override fun onItem(text: String) {
+    override fun onArg(text: String) {
       commandAliases[text]?.forEach(::onArg)?.also { return } //<v recursion unchecked.
       subCommands[text]?.runTo(res, args.sliceArray(pos..args.lastIndex))?.also { stop() }
+      return super.onArg(text)
+    }
+    override fun onItem(text: String) {
       fun addItem() = res.items.plusAssign(text)
       if (!itemMode.isDisordered && pos != lastPosit+1) { // check continuous (ClosedRange)
         if (itemMode.isMustAfter && lastPosit == 0) lastPosit = pos-1 // one chance, late-initial posit. n-1 to keep in ++ later
@@ -145,7 +153,7 @@ open class ArgParser4<A,B,C,D>(
       }
       arg.run { currentArg += " (" + param.showIfPresent {"$it of "} + "$name)"
         convert?.invoke(text)?.let { ensureDynamicResult().getOrPutOM(name).addResult(this, it, name) }
-      } ?: addItem() //^ have-convert: store in map
+      } ?: addItem() //^ have convert: store in map
       lastPosit++
     }
     //vv all about onPrefix handling. var autoSplitRes.
@@ -219,11 +227,11 @@ open class ArgParser4<A,B,C,D>(
     fun addItems() {
       result.items.let(transform_items).forEach { argLine.add(it) }
       result.named?.map?.forEach { (k, v) -> if (k in itemArgNames) argLine.add("${v.get()}") }
-    } // order branched
+    } // appear order is determined by itemMode
     fun addArg(p: Arg<*>, res: Any) {
       if (res == p.defaultValue) { return }
       argLine.add("$deftPrefix${if (use_shorthand) p.secondName else p.firstName}")
-      fun add(param: Any?) { argLine.add(param?.let(::showParam) ?: "$param"/*null*/) }
+      fun add(param: Any?) { argLine.add(param?.let(::showParam) ?: "$param"/*||null*/) }
       if (p.param?.split()?.size?:0 > 1) when (res) { // multi-param
         is Pair<*, *> -> res.run { add(first) ; add(second) }
         is Triple<*, *, *> -> res.run { add(first) ; add(second) ; add(third) }
@@ -233,12 +241,12 @@ open class ArgParser4<A,B,C,D>(
     fun addArg(p: Arg<*>, sto: DynOM) {
       fun add(res: Any) = addArg(p, res)
       sto.value?.let(::add) ?:/*repeated*/ sto.forEach(::add)
-    }
+    } //v begin appending, item+flags.
     if (itemMode.isMustBefore) addItems()
     result.flags.forEach { argLine.add("$deftPrefix${it}") }
     for ((p, sto) in typedArgs.zip(result.tup.run { listOf(e1, e2, e3, e4) })) {
       @Suppress("unchecked_cast") addArg(p, sto as DynOM)
-    } //^ append for ps
+    } //^ append for argToOMs
     result.named?.map?.forEach { (k, v) ->
       if (k in itemArgNames) return@forEach
       val p = dynamicNameMap?.get(k) ?: error("nonexistent arg named $k")
@@ -248,7 +256,7 @@ open class ArgParser4<A,B,C,D>(
     return argLine.toTypedArray()
   }
 
-  /** [caps]: (param to help) ; [row_max]: in summary, max line len ; [groups]: "*" to "Options", "(subcmd)" to "Subcmd", "a b c" to "SomeGroup" */
+  /** [caps]: e.g. (param to help) ; [row_max]: max line len in summary ; [groups]: "*" to "Options", "(subcmd)" to "Subcmd", "a b c" to "SomeGroup" */
   fun toString(
     caps: Pair<TextCaps, TextCaps> = (TextCaps.None to TextCaps.None), row_max: Int = 70,
     head: String = "Usage: ", prog: String = "", prologue: String = "", epilogue: String = "",
@@ -321,10 +329,10 @@ open class ArgParser4<A,B,C,D>(
     override val subCommandHelps = argp.subCommandHelps
     override val deftPrefix = argp.deftPrefix
     override val prefixes = argp.prefixes
+    override fun printHelp() = argp.printHelp()
+    override fun prefixMessageCaps() = argp.prefixMessageCaps() //<vv message, rescue, check, checkResult
     override fun rescuePrefix(name: String): Arg<*> = argp.rescuePrefix(name)
     override fun rescueMissing(p: Arg<*>): Any? = argp.rescueMissing(p)
-    override fun prefixMessageCaps() = argp.prefixMessageCaps()
-    override fun printHelp() = argp.printHelp()
     override fun checkAutoSplitForName(name: String, param: String) = argp.checkAutoSplitForName(name, param)
     override fun checkPrefixForName(name: String, prefix: String) = argp.checkPrefixForName(name, prefix)
     override fun checkResult(result: DynParseResultUnit) = runResultCheck(result) { checkResult(it) }
