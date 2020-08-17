@@ -137,7 +137,9 @@ open class ArgParser4<A,B,C,D>(
 
     override fun onArg(text: String) {
       commandAliases[text]?.forEach(::onArg)?.also { return } //<v recursion unchecked.
-      subCommands[text]?.runTo(res, args.sliceArray(pos..args.lastIndex))?.also { stop() }
+      try { //v see [SwitchParser.run], add subcmd name to exc.
+        subCommands[text]?.runTo(res, args.sliceArray(pos..args.lastIndex))?.also { stop() }
+      } catch (e: IllegalArgumentException) { throw IllegalArgumentException(e.message?.plus(" ($text)"), e.cause) }
       return super.onArg(text)
     }
     override fun onItem(text: String) {
@@ -200,7 +202,10 @@ open class ArgParser4<A,B,C,D>(
     } //^ dynamic interpret for prefix (also cached)
 
     private fun parseError(message: String): Nothing = throw ParseError(prefixMessageCaps().first(message))
-    private fun missing(p: Arg<*>) = if (!p.repeatable) parseError("missing argument $deftPrefix${p.firstName} ${p.param}: ${p.help}") else null
+    private fun missing(p: Arg<*>): Nothing? {
+      val (capPre, capMsg) = prefixMessageCaps()
+      return if (!p.repeatable) throw ParseError(capPre("missing argument")+capMsg(" $deftPrefix${p.firstName} ${p.param}: ${p.help}")) else null
+    }
     private fun assignDefaultOrFail(p: Arg<*>, sto: DynOM) {
       if (!p.repeatable) { sto.value = sto.value ?: p.defaultValue ?: rescueMissing(p) ?: missing(p) }
       else { if (sto.size == 0) p.defaultValue?.let(sto::add) ?: rescueMissing(p) ?: missing(p) }

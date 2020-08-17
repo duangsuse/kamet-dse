@@ -309,6 +309,7 @@ class AirLineExample {
     Git.run("add -p file")
     Git.run("remote add origin git@github.com:airlift/airline.git")
     Git.run("-v remote show origin")
+    //Git.run("-v remote show orig -n -g")
     assertEquals("""
       Usage: pint (-count -c num) [-h -help]
       network test utility
@@ -339,7 +340,7 @@ class AirLineExample {
         addSub("add", "Adds a remote", Add)
       }
       object Show: GitCmd<Unit>(
-        noArg, arg("n", "Do not query remote heads"),
+        noArg, arg("n", "Do not query remote heads") { throw IllegalArgumentException("ee") },
         items = listOf(arg("name", "Remote to show"))
       )
       object Add: GitCmd<Unit>(

@@ -23,8 +23,14 @@ abstract class SwitchParser<R>(protected val args: ArgArray, private val prefixe
   /** Called before [onPrefix]. [ParseError] thrown can be caught in [run]. */
   protected open fun checkPrefixForName(name: String, prefix: String) {} //<v custom prefix check & message capitalize
   protected open fun prefixMessageCaps(): Pair<TextCaps, TextCaps> = TextCaps.nonePair
-  class ParseError(message: String, exception: Throwable? = null): Error(message, exception) //< control exceptions
-  object ParseStop: Exception()
+  data class ParseLoc(val pos: Int, val argCount: Int, val currentArg: String) {
+    fun chain(other: ParseLoc) = ParseLoc(pos+other.pos, argCount+other.argCount, currentArg)
+    override fun toString() = "(#$pos, arg $argCount $currentArg)"
+  }
+  class ParseError(message: String, cause: Throwable? = null, val loc: ParseLoc? = null): Error(message, cause) {
+    override val message: String? get() = super.message?.plus(loc?.toString().showIfPresent {" $it"})
+  }
+  object ParseStop: Exception() //<v control exceptions
   object PrefixesStop: Exception()
 
   protected open fun onArg(text: String) {
@@ -35,16 +41,20 @@ abstract class SwitchParser<R>(protected val args: ArgArray, private val prefixe
   }
   open fun run(): R {
     val (capPre, capMsg) = prefixMessageCaps()
+    val kwAt = capPre("at") ; val kwIn = capPre("in")
     fun msgFmt(ex: Throwable) = capMsg(": ${ex.message}") //< main counted read&decide loop
     var argCount = 1 ; var prefixesStop = false
+    fun parseLoc() = ParseLoc(pos, argCount, "$kwAt $currentArg")
+    fun rootLoc() = parseLoc().copy(currentArg = "$kwIn $currentArg")
     while (hasNext()) try {
       val text = next().also { currentArg = it }
       if (prefixesStop) onItem(text) else onArg(text)
       argCount++
     } catch (_: ParseStop) { break }
       catch (_: PrefixesStop) { prefixesStop = true }
-      catch (e: IllegalArgumentException) { throw IllegalArgumentException(capPre("bad argument $argCount, $currentArg")+msgFmt(e), e) }
-      catch (e: Throwable) { throw ParseError(capPre("parse fail near $currentArg (#$pos, arg $argCount)")+msgFmt(e), e) }
+      catch (e: IllegalArgumentException) { throw if (e.cause != null/*no append*/) e else IllegalArgumentException(capPre("bad argument $argCount, $currentArg")+msgFmt(e), e) }
+      catch (e: ParseError) { throw ParseError(e.message!!.let { if (e.loc == null) capMsg(it) else it }, e.cause, e.loc?.let(parseLoc()::chain) ?: rootLoc()) }
+      catch (e: Throwable) { throw ParseError(capPre("parse fail")+msgFmt(e), e, rootLoc()) }
     return res
   }
   companion object {

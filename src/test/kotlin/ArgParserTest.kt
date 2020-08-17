@@ -43,13 +43,13 @@ class ArgParserTest: BaseArgParserTest<String, Pair<String, String>, String,Unit
     backP("-- a").run { assertEquals(emptyList<String>(), items) }
   }
   @Test fun itFails() {
-    assertFailMessage("parse fail near --E (#3, arg 2): single-char shorthand should like: -E", "--hex af --E")
+    assertFailMessage("single-char shorthand should like: -E (#3, arg 2 in --E)", "--hex af --E")
     assertFailMessage("bad argument 1, --hex's n: For input string: \".23\"", "--hex .23")
-    assertFailMessage("parse fail near in -e (#6, arg 2): argument e repeated", "-e wtf mode -e twice x item")
+    assertFailMessage("argument e repeated (#6, arg 2 in in -e)", "-e wtf mode -e twice x item")
     assertEquals("flag wtf w/o param should be putted in ArgParser(flags = ...)",
       assertFailsWith<IllegalStateException> { ArgParser1(arg("wtf", "e mmm", param = null)).run("".splitArgv()) }.message)
-    assertFailMessage("parse fail near -e (#1, arg 1): expecting stat for -e", "-e")
-    assertFailMessage("parse fail near -e (#4, arg 2): expecting mode for -e", "-hex 23 -e wtf")
+    assertFailMessage("expecting stat for -e (#1, arg 1 in -e)", "-e")
+    assertFailMessage("expecting mode for -e (#4, arg 2 in -e)", "-hex 23 -e wtf")
     assertFailMessage("bad argument 1, in -e: Failed requirement.", "-e code fail")
   }
   @Test fun itFormats() {
@@ -147,17 +147,17 @@ class ExtendArgParserTest: BaseArgParserTest<String, Int, Unit,Unit>(myP) {
       assertTrue('v' in flags)
     }
     backP("emm a -C80").run { assertEquals(80, tup.e2.get()) }
-    assertFailMessage("parse fail near -xx (#1, arg 1): too less heading items (all [ah, em])", "-xx")
-    assertFailMessage("parse fail near x (#3, arg 3): too many items (all [ah, em])", "a s x -nameJack")
-    assertFailMessage("parse fail near loo (#5, arg 5): reading [hel, loo]: should all-before options", "hel xx -count666 -v loo")
-    assertFailMessage("parse fail near x (#4, arg 4): reading [exx, x]: should all-before options", "exx xx -C61 x --name wtf y")
+    assertFailMessage("too less heading items (all [ah, em]) (#1, arg 1 in -xx)", "-xx")
+    assertFailMessage("too many items (all [ah, em]) (#3, arg 3 in x)", "a s x -nameJack")
+    assertFailMessage("reading [hel, loo]: should all-before options (#5, arg 5 in loo)", "hel xx -count666 -v loo")
+    assertFailMessage("reading [exx, x]: should all-before options (#4, arg 4 in x)", "exx xx -C61 x --name wtf y")
   }
   @Test fun fourCasesForMustBefore() {
-    assertFailMessage("parse fail near --nameJerky (#3, arg 3): Jerky doesn't like been broken into parts", "ya ka --nameJerky")
-    assertFailMessage("parse fail near /C19 (#8, arg 6): /C is good emotion, not parameter", "eh ss -name Black -v /xxx a /C19")
+    assertFailMessage("Jerky doesn't like been broken into parts (#3, arg 3 in --nameJerky)", "ya ka --nameJerky")
+    assertFailMessage("/C is good emotion, not parameter (#8, arg 6 in /C19)", "eh ss -name Black -v /xxx a /C19")
     backP("wtf") // item only
-    assertFailMessage("parse fail near -name (#1, arg 1): too less heading items (all [ah, em])", "-name Jessie emm")
-    assertFailMessage("parse fail near -name (#1, arg 1): too less heading items (all [ah, em])", "-name Jake ehh -v")
+    assertFailMessage("too less heading items (all [ah, em]) (#1, arg 1 in -name)", "-name Jessie emm")
+    assertFailMessage("too less heading items (all [ah, em]) (#1, arg 1 in -name)", "-name Jake ehh -v")
   }
   @Test fun dynamicInterpret() {
     p("as aa --add 1 -add 2 -add 3").run { assertEquals("1 2 3".split(), named!!.getAsList("add")) }
@@ -202,10 +202,10 @@ class ExtendArgParserTest1: BaseArgParserTest<String, Int, File, String>(yourP) 
       assertEquals("Duckling", tup.e1.get())
       assertEquals(listOf("sd", "bd"), items)
     }
-    assertFailMessage("parse fail near -N (#2, arg 2): reading [a]: should all-after options", "a -N make")
-    assertFailMessage("parse fail near -c (#4, arg 3): reading [k]: should all-after options", "-N make k -c 88 c d")
+    assertFailMessage("reading [a]: should all-after options (#2, arg 2 in -N)", "a -N make")
+    assertFailMessage("reading [k]: should all-after options (#4, arg 3 in -c)", "-N make k -c 88 c d")
     assertFailMessage("too less items (all [source, dest])", "-c 233 sf")
-    assertFailMessage("parse fail near 996 (#5, arg 4): too many items (all [source, dest])", "--name doge 233 666 996")
+    assertFailMessage("too many items (all [source, dest]) (#5, arg 4 in 996)", "--name doge 233 666 996")
     p("-h --help")
   }
   @Test fun format() {
@@ -224,6 +224,7 @@ class ExtendArgParserTest1: BaseArgParserTest<String, Int, File, String>(yourP) 
 fun argFileD(name: String, help: String, param: String? = "path", default_value: File? = noFile, repeatable: Boolean = false)
   = argFile(name, help, param, default_value, repeatable, "")
 
+// https://github.com/xenomachina/kotlin-argparser/issues/8
 object AWKArgParser: ArgParser4<File, String, String, String>(
   argFile("file= f exec= E", "execute script file", "path", flags = ""),
   arg("field-separator= F", "set field separator", "fs", " \t"),
@@ -253,7 +254,9 @@ object AWKArgParser: ArgParser4<File, String, String, String>(
     argFileD("include= i", "include file", "file"),
     arg("lint= L", "lint level", "", "none").checkOptions("fatal", "invalid", "no-ext"),
     argFileD("pretty-print= o", "pretty print to", "file"),
-    argFileD("profile= p", "use profile", "file")
+    argFileD("profile= p", "use profile", "file"),
+    arg("color", "colorize the output", "path", ""), //<v not good approach, try use dynamic arg rescuePrefix()
+    *listOf("always", "auto", "never").map { arg("color=$it", "$it colorize the output", "path", "") }.toTypedArray()
   )
 ) {
 
@@ -268,8 +271,8 @@ object AWKArgParser: ArgParser4<File, String, String, String>(
 class AWKArgParserTests: BaseArgParserTest<File, String, String, String>(AWKArgParser) {
   @Test fun fourCaseForMustAfter() {
     assertFailMessage("no executable provided", "-g")
-    assertFailMessage("parse fail near -g (#3, arg 3): reading [a.awk]: should all-after options", "z a.awk -g")
-    assertFailMessage("parse fail near -g (#3, arg 3): reading [x.awk]: should all-after options", "z x.awk -g a.awk")
+    assertFailMessage("reading [a.awk]: should all-after options (#3, arg 3 in -g)", "z a.awk -g")
+    assertFailMessage("reading [x.awk]: should all-after options (#3, arg 3 in -g)", "z x.awk -g a.awk")
     backP("z a.awk")
   }
   @Test fun itWorks() {
@@ -285,44 +288,49 @@ class AWKArgParserTests: BaseArgParserTest<File, String, String, String>(AWKArgP
       assertEquals("PS", flags)
     }
     backP("-la -lb -va=2 -vb=2 -fa")
-    assertFailMessage("parse fail near -F: (#1, arg 1): auto-split : used in shorthands", "-F:")
+    assertFailMessage("auto-split : used in shorthands (#1, arg 1 in -F:)", "-F:")
   }
   @Test fun format() {
     assertEquals("""
-    Usage: (-file= -f -exec= -E path) (-field-separator= -F fs) {-assign= -v var=val}
-            {-load= -l lib} [-characters-as-bytes -b] [-traditional -c] [-copyright -C]
-            [-gen-pot -g] [-bignum -M] [-use-lc-numeric -N] [-non-decimal-data -n]
-            [-optimize -O] [-posix -P] [-re-interval -r] [-no-optimize -s]
-            [-sandbox -S] [-lint-old -t] [-h -help] [-version -V] (-dump-variables= -d file)
-            (-debug= -D file) (-source= -e code) (-include= -i file) (-lint= -L lint=)
-            (-pretty-print= -o file) (-profile= -p file) <0> <...>
-      -file= -f -exec= -E: execute script file (default none)
-      -field-separator= -F: set field separator (default  	)
-      -assign= -v: assign variable
-      -load= -l: load library
-      -characters-as-bytes -b: characters as bytes
-      -traditional -c: traditional
-      -copyright -C: copyright
-      -gen-pot -g: gen pot
-      -bignum -M: bignum
-      -use-lc-numeric -N: use lc numeric
-      -non-decimal-data -n: non decimal data
-      -optimize -O: optimize
-      -posix -P: posix
-      -re-interval -r: re interval
-      -no-optimize -s: no optimize
-      -sandbox -S: sandbox
-      -lint-old -t: lint old
-      -h -help: print this help
-      -version -V: print version
-      -dump-variables= -d: dump vars to file (default none)
-      -debug= -D: debug (default none)
-      -source= -e: execute source (default emm)
-      -include= -i: include file (default none)
-      -lint= -L: lint level in fatal, invalid, no-ext (default none)
-      -pretty-print= -o: pretty print to (default none)
-      -profile= -p: use profile (default none)
-      0: ss
+      Usage: (-file= -f -exec= -E path) (-field-separator= -F fs) {-assign= -v var=val}
+              {-load= -l lib} [-characters-as-bytes -b] [-traditional -c] [-copyright -C]
+              [-gen-pot -g] [-bignum -M] [-use-lc-numeric -N] [-non-decimal-data -n]
+              [-optimize -O] [-posix -P] [-re-interval -r] [-no-optimize -s]
+              [-sandbox -S] [-lint-old -t] [-h -help] [-version -V] (-dump-variables= -d file)
+              (-debug= -D file) (-source= -e code) (-include= -i file) (-lint= -L lint=)
+              (-pretty-print= -o file) (-profile= -p file) (-color path) (-color=always path)
+              (-color=auto path) (-color=never path) <0> <...>
+        -file= -f -exec= -E: execute script file (default none)
+        -field-separator= -F: set field separator (default  	)
+        -assign= -v: assign variable
+        -load= -l: load library
+        -characters-as-bytes -b: characters as bytes
+        -traditional -c: traditional
+        -copyright -C: copyright
+        -gen-pot -g: gen pot
+        -bignum -M: bignum
+        -use-lc-numeric -N: use lc numeric
+        -non-decimal-data -n: non decimal data
+        -optimize -O: optimize
+        -posix -P: posix
+        -re-interval -r: re interval
+        -no-optimize -s: no optimize
+        -sandbox -S: sandbox
+        -lint-old -t: lint old
+        -h -help: print this help
+        -version -V: print version
+        -dump-variables= -d: dump vars to file (default none)
+        -debug= -D: debug (default none)
+        -source= -e: execute source (default emm)
+        -include= -i: include file (default none)
+        -lint= -L: lint level in fatal, invalid, no-ext (default none)
+        -pretty-print= -o: pretty print to (default none)
+        -profile= -p: use profile (default none)
+        -color: colorize the output (default none)
+        -color=always: always colorize the output (default none)
+        -color=auto: auto colorize the output (default none)
+        -color=never: never colorize the output (default none)
+        0: ss
 
     """.trimIndent(), p.toString())
   }
